@@ -9,6 +9,8 @@ never something the chat endpoint or the agent can trigger on its own.
 
 from __future__ import annotations
 
+import logging
+
 import anthropic
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
@@ -21,6 +23,8 @@ from app.schemas.project import Etapa, Proyecto
 from app.storage import files as storage
 from app.tools import handlers
 from app.vision.extractor import ExtraccionError, extraer_pieza_desde_plano
+
+_logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
@@ -134,6 +138,7 @@ async def subir_plano(project_id: str, archivo: UploadFile = File(...), instrucc
         storage.guardar_proyecto(proyecto)
         raise HTTPException(status_code=503, detail=_MENSAJE_SERVICIO_NO_DISPONIBLE) from exc
     except anthropic.AnthropicError as exc:
+        _logger.error("Error de Anthropic extrayendo plano (proyecto %s): %s", project_id, exc)
         proyecto.etapa = Etapa.ERROR
         proyecto.registrar_evento("Error de Anthropic extrayendo datos del plano", detalle=str(exc))
         storage.guardar_proyecto(proyecto)
@@ -257,6 +262,14 @@ def chat(project_id: str, body: ChatBody) -> dict:
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=_MENSAJE_SERVICIO_NO_DISPONIBLE) from exc
     except anthropic.AnthropicError as exc:
+        # Same as subir_plano below: the client only ever sees the generic
+        # professional message, but the real exception must land somewhere
+        # the operator can actually see it - this was missing here (unlike
+        # subir_plano, which already logged it), which made a real chat
+        # failure undiagnosable without server shell access.
+        _logger.error("Error de Anthropic en chat (proyecto %s): %s", project_id, exc)
+        proyecto.registrar_evento("Error de Anthropic en chat", detalle=str(exc))
+        storage.guardar_proyecto(proyecto)
         raise _http_desde_error_anthropic(exc) from exc
     storage.guardar_proyecto(proyecto)
     return {

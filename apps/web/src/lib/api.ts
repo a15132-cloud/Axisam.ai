@@ -82,6 +82,7 @@ export const api = {
 
   archivoUrl: (id: string, nombre: string) => `${baseURL}/projects/${id}/files/${encodeURIComponent(nombre)}`,
   planoOriginalUrl: (id: string) => `${baseURL}/projects/${id}/plano-original`,
+  descargarTodoUrl: (id: string) => `${baseURL}/projects/${id}/descargar-todo`,
 
   materiales: () => unwrap<MaterialKB[]>(client.get("/knowledge-base/materiales")),
   postprocesadores: () => unwrap<PostprocesadorKB[]>(client.get("/knowledge-base/postprocesadores")),

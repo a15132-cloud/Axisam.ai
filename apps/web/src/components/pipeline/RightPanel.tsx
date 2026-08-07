@@ -1,6 +1,7 @@
-import { FileText } from "lucide-react";
+import { FileText, PackageCheck } from "lucide-react";
 import { Card, CardHeader } from "../common/Card";
 import { Badge } from "../common/Badge";
+import { Button } from "../common/Button";
 import { ActividadTimeline } from "./ActividadTimeline";
 import { StlViewer } from "../viewer/StlViewer";
 import { api } from "../../lib/api";
@@ -56,6 +57,15 @@ export function RightPanel({ proyecto }: { proyecto: Proyecto }) {
           {proyecto.postprocesador && <Row label="Postprocesador" value={proyecto.postprocesador} />}
           {proyecto.aprobado_por && <Row label="Aprobado por" value={proyecto.aprobado_por} />}
         </div>
+        {proyecto.archivos.length > 0 && (
+          <div className="border-t border-[var(--color-border-soft)] p-3">
+            <a href={api.descargarTodoUrl(proyecto.id)} download>
+              <Button variant="primary" icon={<PackageCheck className="h-3.5 w-3.5" />} className="w-full">
+                Descargar todo (.zip)
+              </Button>
+            </a>
+          </div>
+        )}
       </Card>
 
       {nombrePlano && (

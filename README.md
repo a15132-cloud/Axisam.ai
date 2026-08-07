@@ -17,7 +17,7 @@ infraestructura, el sistema está dividido así:
 | Capa 2 — Orquestador (loop de tool-use con Claude) | **Real y funcional** (FastAPI + Anthropic SDK) |
 | Capa 3 — Visión / extracción del plano | **Real y funcional** (Claude multimodal), requiere `ANTHROPIC_API_KEY` |
 | Capa 4 — SolidWorks (modelado 3D) | **Geometría real**, generada con un kernel OpenCascade (`cadquery`) en vez de la COM API de SolidWorks. Produce archivos STEP/STL reales, abribles en SolidWorks hoy mismo. |
-| Capa 4 — Mastercam (trayectorias / código G) | **Simulación basada en reglas**, claramente etiquetada como tal. Genera ciclos de taladrado reales (G81/G83) para barrenos; para cajeras/perfiles/contornos deja un placeholder explícito en vez de inventar una trayectoria. **Ningún código G de este sistema debe cargarse a una máquina sin que Mastercam real lo verifique.** |
+| Capa 4 — Mastercam (trayectorias / código G) | **Simulación basada en reglas**, claramente etiquetada como tal. Genera trayectoria de corte real para taladrado (G81/G83), cajeras (desbaste en zigzag con radio de herramienta compensado) y contornos exteriores/redondeos (offset con esquinas correctamente redondeadas) — no solo taladros. Sigue sin chequeo de colisiones entre features simultáneos, sin rampas de entrada, y features sin suficiente geometría en el JSON (p.ej. escalón) quedan como planeación sin trayectoria. **Ningún código G de este sistema debe cargarse a una máquina sin que Mastercam real lo verifique.** |
 | Capa 5 — Base de conocimiento de manufactura | **Real**, tabla de decisión explícita (YAML + Python), datos semilla pendientes de validar por un maquinista |
 | Capa 6 — Aprobación humana | **Real y aplicado en el backend** — cada transición de aprobación es un endpoint dedicado que ningún tool-call del LLM puede invocar por su cuenta |
 
@@ -71,6 +71,11 @@ uv run pytest
 4. El sistema planea trayectorias y muestra una simulación estimada (tiempo, herramientas,
    velocidades/avances). Un usuario con nombre/usuario da la **aprobación final** — checkpoint 3.
 5. Solo entonces se exporta el código G (marcado como simulación pendiente de verificación).
+6. En cualquier momento a partir del modelo 3D, el botón **"Descargar todo (.zip)"** entrega
+   STEP + STL + código G (si existe) + un reporte de resumen en un solo archivo.
+
+La interfaz es responsiva: en celular, el menú de proyectos se abre como panel deslizable y el
+panel de plano/vista 3D/actividad se accede con una pestaña "Detalles" junto al chat.
 
 ## Desplegar a producción
 
@@ -112,8 +117,10 @@ Vercel**:
 - El motor de geometría (Capa 4 SolidWorks) no soporta todavía: bases no rectangulares/circulares,
   escalones, perfiles exteriores no rectangulares, ni features en caras laterales. Se reportan
   como advertencia explícita en vez de modelarse a ciegas.
-- El código G solo tiene trayectoria real para taladrado; cajeras/perfiles quedan como
-  planeación (herramienta + velocidades) sin geometría de corte, hasta integrar Mastercam real.
+- El código G tiene trayectoria de corte real para taladrado, cajeras/ranuras y contornos
+  exteriores/redondeos; features sin geometría suficiente en el JSON (p.ej. escalón) quedan como
+  planeación (herramienta + velocidades) sin trayectoria, hasta integrar Mastercam real. Ninguna
+  de las dos tiene chequeo de colisiones entre features simultáneos ni rampas de entrada.
 - Los valores de velocidad/avance de la base de conocimiento (`app/knowledge_base/data/`) son
   datos semilla de referencia — cada material tiene un campo `validado_por: null` hasta que un
   maquinista del taller los revise.

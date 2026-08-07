@@ -5,14 +5,16 @@ here: real decisions (tool, speeds/feeds, strategy) via the Capa 5 rules
 engine, per feature. This is genuinely useful output - a machinist can
 review and use this plan even before any G-code exists.
 
-What this module does NOT do: compute actual cutter-location toolpath
-geometry (gouge-checked pocket clearing, contour offsetting with linking
-moves, etc). That is what Mastercam's engine is for. See cam/gcode.py for
-how the plan is turned into a (clearly labeled, partial) G-code file.
+What this module does NOT do: gouge/collision checking across
+simultaneous features, adaptive/trochoidal roughing, or ramped tool
+entry - real 2.5D cutter-center geometry for pockets and exterior
+contours now lives in cam/toolpath_geometry.py and cam/gcode.py, but
+without those safety/optimization layers a real CAM engine provides.
 """
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 from app.knowledge_base import rules
@@ -57,13 +59,15 @@ def planear_trayectoria(pieza: Pieza, postprocesador: str | None = None) -> Plan
         advertencias.extend(f"[{feature.tipo.value} {feature.id or ''}] {w}" for w in op.parametros.advertencias)
 
         n_instancias = max(len(feature.lista_posiciones()), 1)
-        profundidad = op.profundidad_pasada_mm or pieza.dimensiones.espesor_mm
+        profundidad_pasada = op.profundidad_pasada_mm or pieza.dimensiones.espesor_mm
+        profundidad_total = op.profundidad_total_mm or profundidad_pasada
+        n_pasadas_z = max(1, math.ceil(profundidad_total / profundidad_pasada)) if op.herramienta.tipo != "broca" else 1
         tiempo_total_min += TIEMPO_CAMBIO_HERRAMIENTA_MIN  # una vez por operacion/herramienta
         if op.parametros.avance_mm_min > 0:
-            tiempo_corte = n_instancias * (profundidad / op.parametros.avance_mm_min) * 1.4  # +40% retractos/aceleracion
+            tiempo_corte = n_instancias * n_pasadas_z * (profundidad_pasada / op.parametros.avance_mm_min) * 1.4  # +40% retractos/aceleracion
         else:
             tiempo_corte = 0.0
-        tiempo_total_min += tiempo_corte + n_instancias * TIEMPO_POSICIONAMIENTO_MIN
+        tiempo_total_min += tiempo_corte + n_instancias * n_pasadas_z * TIEMPO_POSICIONAMIENTO_MIN
 
         clave_h = f"{op.herramienta.tipo}_{op.herramienta.diametro_mm}"
         if clave_h not in herramientas_usadas:

@@ -50,6 +50,7 @@ class OperacionRecomendada:
     herramienta: HerramientaSeleccionada
     parametros: ParametrosCorte
     profundidad_pasada_mm: float | None
+    profundidad_total_mm: float | None = None
     notas: list[str] = field(default_factory=list)
 
 
@@ -223,8 +224,11 @@ def planear_operacion(feature: Feature, material: Material, espesor_pieza_mm: fl
     if not herramienta.exacta:
         notas.append(f"No hay herramienta exacta en catalogo para este feature - se selecciono {herramienta.descripcion}")
 
-    profundidad = feature.profundidad_mm or (espesor_pieza_mm if feature.pasante else None)
-    max_pasada = min(herramienta.diametro_mm * 0.5, 3.0) if herramienta.tipo != "broca" else profundidad
+    profundidad_total = feature.profundidad_mm or (espesor_pieza_mm if feature.pasante else None)
+    if profundidad_total is None:
+        profundidad_total = espesor_pieza_mm * 0.5
+        notas.append("Profundidad no especificada para un feature ciego - se asumio 50% del espesor, confirmar antes de maquinar")
+    max_pasada = min(herramienta.diametro_mm * 0.5, 3.0) if herramienta.tipo != "broca" else profundidad_total
 
     return OperacionRecomendada(
         feature_id=feature.id,
@@ -232,6 +236,7 @@ def planear_operacion(feature: Feature, material: Material, espesor_pieza_mm: fl
         herramienta=herramienta,
         parametros=parametros,
         profundidad_pasada_mm=max_pasada,
+        profundidad_total_mm=profundidad_total,
         notas=notas,
     )
 

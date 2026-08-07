@@ -12,9 +12,9 @@ from __future__ import annotations
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 
-from app.storage import files as storage
+from app.storage import bundle, files as storage
 
 router = APIRouter(prefix="/api/projects", tags=["files"])
 
@@ -44,6 +44,26 @@ def descargar_archivo(project_id: str, nombre_archivo: str) -> FileResponse:
         path=ruta,
         filename=archivo.nombre,
         media_type=_MEDIA_TYPES.get(archivo.tipo, "application/octet-stream"),
+    )
+
+
+@router.get("/{project_id}/descargar-todo")
+def descargar_todo(project_id: str) -> Response:
+    try:
+        proyecto = storage.cargar_proyecto(project_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    if not proyecto.archivos:
+        raise HTTPException(status_code=404, detail="Este proyecto todavia no tiene archivos generados")
+
+    contenido = bundle.generar_zip(proyecto)
+    nombre_pieza = proyecto.pieza_extraida.pieza if proyecto.pieza_extraida else proyecto.id
+    nombre_archivo = f"{nombre_pieza}_axiscam.zip"
+    return Response(
+        content=contenido,
+        media_type="application/zip",
+        headers={"Content-Disposition": f'attachment; filename="{nombre_archivo}"'},
     )
 
 

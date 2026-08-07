@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { AlertOctagon, Download, PartyPopper } from "lucide-react";
+import { AlertOctagon, Download, PackageCheck, PartyPopper } from "lucide-react";
 import { api } from "../../lib/api";
 import { Button } from "../common/Button";
 import { WarningBanner } from "../common/WarningBanner";
@@ -36,20 +36,27 @@ export function CodigoGCard({
           <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
             Simulación pendiente de verificar con Mastercam real. {operacionesConMovimientoReal} operación(es) tienen
-            trayectoria real generada (ciclos de taladrado); {operacionesSoloPlaneadas} quedaron solo planeadas
-            (requieren Mastercam para la trayectoria final). Un maquinista debe revisar el archivo completo antes de
-            cargarlo en la máquina CNC.
+            trayectoria de corte real calculada (taladrado, cajeras, contornos); {operacionesSoloPlaneadas} quedaron
+            solo planeadas (geometría no soportada aún - requieren Mastercam real). Sin chequeo de colisiones entre
+            features simultáneos. Un maquinista debe revisar el archivo completo antes de cargarlo en la máquina CNC.
           </p>
         </div>
       </div>
 
-      {gcode && (
-        <a href={api.archivoUrl(proyectoId, gcode.nombre)} download className="mt-3 inline-block">
-          <Button variant="primary" icon={<Download className="h-3.5 w-3.5" />}>
-            Descargar {gcode.nombre}
+      <div className="mt-3 flex flex-wrap gap-2">
+        <a href={api.descargarTodoUrl(proyectoId)} download>
+          <Button variant="primary" icon={<PackageCheck className="h-3.5 w-3.5" />}>
+            Descargar todo (.zip)
           </Button>
         </a>
-      )}
+        {gcode && (
+          <a href={api.archivoUrl(proyectoId, gcode.nombre)} download>
+            <Button variant="secondary" icon={<Download className="h-3.5 w-3.5" />}>
+              Solo {gcode.nombre}
+            </Button>
+          </a>
+        )}
+      </div>
 
       {advertencias.length > 0 && (
         <div className="mt-3">

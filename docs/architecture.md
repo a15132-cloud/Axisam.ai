@@ -70,14 +70,32 @@ que existe, `app/cam/`:
 - **Sí calcula de verdad** la selección de herramienta y velocidad/avance por feature
   (`app/knowledge_base/rules.py`), usando fórmulas estándar de maquinado (RPM = 1000·Vc / (π·D)).
   Esto es información real y útil incluso sin Mastercam conectado.
-- **Sí genera G-code real** para taladrado (ciclos fijos G81/G83) — es geometría simple
-  (posición + profundidad) y bien definida sin necesitar un motor CAM completo.
-- **No inventa** trayectorias de corte para cajeras/perfiles/contornos. `app/cam/gcode.py` deja
-  un comentario explícito (`TRAYECTORIA NO GENERADA - requiere Mastercam real`) en vez de un
-  G1/G2/G3 fabricado que parecería confiable sin serlo.
+- **Sí genera G-code real** para las operaciones cuya geometría de corte está bien definida a
+  partir del `Pieza` (`app/cam/toolpath_geometry.py`, funciones puras y probadas por separado):
+  - Taladrado: ciclos fijos G81/G83 (posición + profundidad).
+  - Cajeras/ranuras: desbaste en zigzag, con el radio de la herramienta compensado (el centro de
+    la herramienta nunca sale del bolsillo inset por su radio) y multi-pasada en Z según la
+    profundidad total.
+  - Contorno exterior (`perfil_exterior`) y redondeo/chaflán: offset de la silueta de la pieza
+    (rectangular o circular) con esquinas correctamente redondeadas para un offset hacia afuera
+    (suma de Minkowski con un disco de radio = radio de herramienta) — geometría real, no una
+    aproximación cualquiera. `perfil_exterior` usa offset = radio de herramienta (la fresa corta
+    por fuera del contorno nominal); redondeo/chaflán usan offset = 0 (la forma de la herramienta,
+    no el offset, es lo que crea el filete/chaflán).
+  Las esquinas se aproximan con segmentos de línea recta en vez de arcos G2/G3 - una decisión
+  deliberada de seguridad: es mucho más fácil verificar que una lista de puntos calculados está
+  dentro de los límites esperados (hay tests que lo verifican) que verificar que el sentido y el
+  IJ de un arco están bien - un arco con la direccion invertida es un tipo de error que un test
+  superficial no detecta fácilmente.
+- **No inventa** geometría para features sin suficiente información en el `Pieza` (p.ej.
+  `escalon`, que necesitaría saber qué arista y en qué dirección). `app/cam/gcode.py` deja un
+  comentario explícito (`TRAYECTORIA NO GENERADA`) en vez de un G1/G2/G3 fabricado que parecería
+  confiable sin serlo.
 - Todo archivo de código G lleva un encabezado y pie de página que dice **SIMULACIÓN - NO
   VERIFICADO POR MASTERCAM REAL - NO CARGAR EN LA MÁQUINA CNC SIN REVISIÓN**, además de la
-  aprobación humana obligatoria antes de que el archivo exista.
+  aprobación humana obligatoria antes de que el archivo exista. Lo que sigue faltando incluso
+  para las operaciones con trayectoria real: chequeo de colisiones/gubias entre features
+  simultáneos, entradas rampadas (el plunge es recto), y desbaste adaptativo.
 
 Un bug real que se encontró y corrigió durante las pruebas: el generador de ciclos de taladrado
 insertaba un `G0` (movimiento rápido) entre cada barreno repetido de un patrón. `G81`/`G83` son
@@ -120,6 +138,31 @@ derivan del estado real del proyecto en cada render (`app/lib/deriveEntries.ts`)
 mantenerse como una copia separada que se actualiza a mano después de cada acción — evita que la
 UI muestre algo que ya no coincide con lo que el backend realmente hizo.
 
+### Responsive (celular / tablet / escritorio)
+
+Un solo breakpoint (`lg`, 1024px) separa dos layouts, no varios ajustes puntuales:
+
+- **Sidebar de proyectos**: panel fijo en escritorio; por debajo de `lg` se vuelve un cajón
+  (`fixed` + `-translate-x-full`/`translate-x-0`, con backdrop) que se abre con el botón de
+  hamburguesa del header y se cierra solo al seleccionar un proyecto.
+- **Panel derecho** (datos del proyecto, plano, vista 3D, actividad): en escritorio siempre
+  visible junto al chat; por debajo de `lg` estaba simplemente oculto (`hidden lg:block`) - eso
+  se cambió por una pestaña "Chat"/"Detalles" en el header, con ambos paneles siempre montados
+  y solo la visibilidad CSS alternada (`hidden`/`flex` según la pestaña activa), para no perder
+  el estado del chat ni forzar un remount del visor 3D cada vez que se cambia de pestaña.
+- Verificado con capturas reales en 390px (celular), 768px (tablet) y 1600px (escritorio) - no
+  solo revisado por CSS, sino confirmando visualmente que el visor 3D renderiza correctamente
+  después de cambiar de pestaña en móvil (un canvas WebGL creado mientras su contenedor tiene
+  `display:none` puede quedar mal dimensionado; el chat, que es la pestaña por defecto, se monta
+  visible desde el inicio).
+
+### Descarga completa
+
+`GET /api/projects/{id}/descargar-todo` arma un .zip en memoria (`app/storage/bundle.py`) con
+STEP + STL + código G (los que existan) más un `RESUMEN.txt` con las medidas, el plan de
+maquinado y el aviso de qué es geometría real vs. simulación - así el usuario tiene un solo
+archivo para llevarse, sin tener que entender la distinción entre botones individuales.
+
 ## Referencia rápida de la API
 
 Ver `apps/orchestrator/app/api/routes_projects.py` y `routes_files.py` para el detalle; en
@@ -135,5 +178,5 @@ resumen:
 - `POST /api/projects/{id}/aprobar-final` — checkpoint 3 · `/rechazar`
 - `POST /api/projects/{id}/exportar-codigo-g`
 - `POST /api/projects/{id}/chat` — loop de tool-use de Claude
-- `GET /api/projects/{id}/files/{nombre}` y `/plano-original` — descargas
+- `GET /api/projects/{id}/files/{nombre}`, `/plano-original` y `/descargar-todo` (.zip) — descargas
 - `GET /api/knowledge-base/materiales`, `/postprocesadores`

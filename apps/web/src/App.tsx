@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Sidebar } from "./components/layout/Sidebar";
-import { Header } from "./components/layout/Header";
+import { Header, type VistaMobile } from "./components/layout/Header";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { RightPanel } from "./components/pipeline/RightPanel";
 import { api, ApiError } from "./lib/api";
@@ -25,6 +25,8 @@ export default function App() {
   const [mensajesLibres, setMensajesLibres] = useState<ChatEntry[]>([]);
   const [anthropicConfigurado, setAnthropicConfigurado] = useState<boolean | null>(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
+  const [menuAbierto, setMenuAbierto] = useState(false);
+  const [vistaMobile, setVistaMobile] = useState<VistaMobile>("chat");
 
   const [creando, setCreando] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
@@ -67,6 +69,8 @@ export default function App() {
       setProyectos((prev) => [nuevo, ...prev]);
       setProyecto(nuevo);
       setMensajesLibres([]);
+      setVistaMobile("chat");
+      setMenuAbierto(false);
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : "No se pudo crear el proyecto.");
     } finally {
@@ -79,7 +83,9 @@ export default function App() {
     if (p) {
       setProyecto(p);
       setMensajesLibres([]);
+      setVistaMobile("chat");
     }
+    setMenuAbierto(false);
   }
 
   async function eliminarProyecto(id: string) {
@@ -171,7 +177,7 @@ export default function App() {
   const entries: ChatEntry[] = proyecto ? [...derivarEntriesPipeline(proyecto), ...mensajesLibres] : [];
 
   return (
-    <div className="flex h-screen w-full overflow-hidden bg-[var(--color-bg)]">
+    <div className="flex h-dvh w-full overflow-hidden bg-[var(--color-bg)]">
       <Sidebar
         proyectos={proyectos}
         proyectoActualId={proyecto?.id ?? null}
@@ -179,13 +185,27 @@ export default function App() {
         onNuevoProyecto={crearProyecto}
         onEliminar={eliminarProyecto}
         creando={creando}
+        abierto={menuAbierto}
+        onCerrar={() => setMenuAbierto(false)}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
-        <Header nombreProyecto={proyecto?.nombre ?? "Axiscam"} etapa={proyecto?.etapa ?? null} anthropicConfigurado={anthropicConfigurado} />
+        <Header
+          nombreProyecto={proyecto?.nombre ?? "Axiscam"}
+          etapa={proyecto?.etapa ?? null}
+          anthropicConfigurado={anthropicConfigurado}
+          onAbrirMenu={() => setMenuAbierto(true)}
+          vistaMobile={vistaMobile}
+          onCambiarVistaMobile={setVistaMobile}
+          mostrarSwitchMobile={!!proyecto}
+        />
 
         <div className="flex min-h-0 flex-1">
-          <div className="flex min-w-0 flex-1 flex-col border-r border-[var(--color-border)]">
+          <div
+            className={`min-w-0 flex-1 flex-col border-r border-[var(--color-border)] ${
+              vistaMobile === "chat" ? "flex" : "hidden"
+            } lg:flex`}
+          >
             {cargandoInicial ? null : !proyecto ? (
               <EmptyState onNuevoProyecto={crearProyecto} creando={creando} />
             ) : (
@@ -210,7 +230,9 @@ export default function App() {
             )}
           </div>
 
-          <div className="hidden w-[380px] shrink-0 lg:block">{proyecto && <RightPanel proyecto={proyecto} />}</div>
+          <div className={`w-full shrink-0 overflow-hidden lg:w-[380px] ${vistaMobile === "detalles" ? "block" : "hidden"} lg:block`}>
+            {proyecto && <RightPanel proyecto={proyecto} />}
+          </div>
         </div>
       </div>
     </div>

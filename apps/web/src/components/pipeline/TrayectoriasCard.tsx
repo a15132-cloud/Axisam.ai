@@ -30,8 +30,8 @@ export function TrayectoriasCard({ plan, postprocesador }: { plan: ToolpathPlan;
                 <td className="py-1.5 pr-3 text-[var(--color-text)]">{op.feature_id || `#${i + 1}`}</td>
                 <td className="py-1.5 pr-3">{op.estrategia}</td>
                 <td className="py-1.5 pr-3">{op.herramienta}</td>
-                <td className="py-1.5 pr-3">{op.rpm.toLocaleString()}</td>
-                <td className="py-1.5">{op.avance_mm_min.toLocaleString()} mm/min</td>
+                <td className="font-mono py-1.5 pr-3">{op.rpm.toLocaleString()}</td>
+                <td className="font-mono py-1.5">{op.avance_mm_min.toLocaleString()} mm/min</td>
               </tr>
             ))}
           </tbody>

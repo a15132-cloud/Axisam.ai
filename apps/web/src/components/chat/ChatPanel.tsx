@@ -117,7 +117,7 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
             whileTap={{ scale: 0.9 }}
             onClick={enviar}
             disabled={!texto.trim() || enviando}
-            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)] text-white disabled:opacity-40"
+            className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)] text-black disabled:opacity-40"
           >
             <Send className="h-4 w-4" />
           </motion.button>

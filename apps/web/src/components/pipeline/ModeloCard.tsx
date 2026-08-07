@@ -2,6 +2,7 @@ import { Check, Download } from "lucide-react";
 import { Button } from "../common/Button";
 import { WarningBanner } from "../common/WarningBanner";
 import { StlViewer } from "../viewer/StlViewer";
+import { ErrorBoundary } from "../system/ErrorBoundary";
 import type { ArchivoGenerado } from "../../lib/types";
 import { api } from "../../lib/api";
 
@@ -23,7 +24,11 @@ export function ModeloCard({ proyectoId, archivos, advertencias, featuresOmitido
     <div className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
       <h4 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Modelo 3D generado</h4>
 
-      {stl && <StlViewer url={api.archivoUrl(proyectoId, stl.nombre)} />}
+      {stl && (
+        <ErrorBoundary compact>
+          <StlViewer url={api.archivoUrl(proyectoId, stl.nombre)} />
+        </ErrorBoundary>
+      )}
 
       <div className="mt-3 flex flex-wrap gap-2">
         {step && (

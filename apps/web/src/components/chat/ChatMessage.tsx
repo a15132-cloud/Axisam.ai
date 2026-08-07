@@ -56,7 +56,7 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
         {entry.kind === "text" && (
           <div
             className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
-              isUser ? "rounded-tr-sm bg-[var(--color-accent)] text-white" : "rounded-tl-sm bg-[var(--color-surface-2)] text-[var(--color-text)]"
+              isUser ? "rounded-tr-sm bg-[var(--color-accent)] text-black" : "rounded-tl-sm bg-[var(--color-surface-2)] text-[var(--color-text)]"
             }`}
           >
             {entry.texto}
@@ -64,11 +64,11 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
         )}
 
         {entry.kind === "upload" && (
-          <div className="flex items-center gap-2 rounded-2xl rounded-tr-sm bg-[var(--color-accent)] px-4 py-2.5 text-sm text-white">
+          <div className="flex items-center gap-2 rounded-2xl rounded-tr-sm bg-[var(--color-accent)] px-4 py-2.5 text-sm text-black">
             <Paperclip className="h-3.5 w-3.5 shrink-0" />
             <div>
               <p>Subí un plano: {entry.archivoNombre}</p>
-              {entry.instrucciones && <p className="mt-0.5 text-xs text-blue-100">{entry.instrucciones}</p>}
+              {entry.instrucciones && <p className="mt-0.5 text-xs text-black/70">{entry.instrucciones}</p>}
             </div>
           </div>
         )}

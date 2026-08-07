@@ -1,26 +1,29 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Oswald", "IBM Plex Sans", ui-sans-serif, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  --color-bg: #0a0d14;
-  --color-surface: #10141d;
-  --color-surface-2: #161b26;
-  --color-surface-3: #1c2230;
-  --color-border: #232a3a;
-  --color-border-soft: #1a2030;
+  /* Primario: negro. Secundario: naranja. Terciario: blanco. */
+  --color-bg: #0a0a0a;
+  --color-surface: #131313;
+  --color-surface-2: #1a1a1a;
+  --color-surface-3: #232323;
+  --color-border: #2e2e2e;
+  --color-border-soft: #1f1f1f;
 
-  --color-accent: #3b82f6;
-  --color-accent-2: #60a5fa;
-  --color-accent-soft: #1d3a63;
+  --color-accent: #ff6a00;
+  --color-accent-2: #ff8c3d;
+  --color-accent-soft: #3d1f0a;
 
   --color-ok: #34d399;
-  --color-warn: #fbbf24;
-  --color-danger: #f87171;
+  --color-warn: #eab308;
+  --color-danger: #ef4444;
 
-  --color-text: #e7ebf3;
-  --color-text-muted: #8b93a7;
-  --color-text-faint: #5b6478;
+  --color-text: #f2f2f0;
+  --color-text-muted: #a3a19c;
+  --color-text-faint: #6b6963;
 }
 
 @layer base {
@@ -61,11 +64,29 @@
     background: transparent;
   }
 
+  .font-display {
+    font-family: var(--font-display);
+  }
+  .font-mono {
+    font-family: var(--font-mono);
+  }
+
   .text-gradient-brand {
-    background: linear-gradient(120deg, #3b82f6 0%, #93c5fd 45%, #ffffff 100%);
+    background: linear-gradient(120deg, #ff6a00 0%, #ffb066 45%, #ffffff 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
+  }
+
+  /* Franja tipo cinta de peligro - acento industrial, no decorativo generico */
+  .hazard-stripe {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      var(--color-accent) 0px,
+      var(--color-accent) 10px,
+      var(--color-bg) 10px,
+      var(--color-bg) 20px
+    );
   }
 }
 
@@ -80,10 +101,10 @@
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.45);
+    box-shadow: 0 0 0 0 rgba(255, 106, 0, 0.5);
   }
   100% {
-    box-shadow: 0 0 0 12px rgba(59, 130, 246, 0);
+    box-shadow: 0 0 0 12px rgba(255, 106, 0, 0);
   }
 }
 

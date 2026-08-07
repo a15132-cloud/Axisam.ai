@@ -4,6 +4,7 @@ import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
 import { ActividadTimeline } from "./ActividadTimeline";
 import { StlViewer } from "../viewer/StlViewer";
+import { ErrorBoundary } from "../system/ErrorBoundary";
 import { api } from "../../lib/api";
 import type { Proyecto } from "../../lib/types";
 
@@ -51,7 +52,7 @@ export function RightPanel({ proyecto }: { proyecto: Proyecto }) {
           right={<Badge tone={ETAPA_TONE[proyecto.etapa]}>{ETAPA_LABEL[proyecto.etapa]}</Badge>}
         />
         <div className="space-y-1.5 px-4 py-3 text-xs">
-          <Row label="ID" value={proyecto.id} />
+          <Row label="ID" value={proyecto.id} mono />
           <Row label="Creado" value={new Date(proyecto.creado_en).toLocaleString("es-MX")} />
           <Row label="Actualizado" value={new Date(proyecto.actualizado_en).toLocaleString("es-MX")} />
           {proyecto.postprocesador && <Row label="Postprocesador" value={proyecto.postprocesador} />}
@@ -97,7 +98,9 @@ export function RightPanel({ proyecto }: { proyecto: Proyecto }) {
         <Card delay={0.1}>
           <CardHeader title="Vista 3D previa" />
           <div className="p-4">
-            <StlViewer url={api.archivoUrl(proyecto.id, stl.nombre)} />
+            <ErrorBoundary compact>
+              <StlViewer url={api.archivoUrl(proyecto.id, stl.nombre)} />
+            </ErrorBoundary>
           </div>
         </Card>
       )}
@@ -112,11 +115,11 @@ export function RightPanel({ proyecto }: { proyecto: Proyecto }) {
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
     <div className="flex items-center justify-between">
       <span className="text-[var(--color-text-faint)]">{label}</span>
-      <span className="font-medium text-[var(--color-text)]">{value}</span>
+      <span className={`font-medium text-[var(--color-text)] ${mono ? "font-mono" : ""}`}>{value}</span>
     </div>
   );
 }

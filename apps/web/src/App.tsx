@@ -246,7 +246,7 @@ function EmptyState({ onNuevoProyecto, creando }: { onNuevoProyecto: () => void;
       <button
         onClick={onNuevoProyecto}
         disabled={creando}
-        className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-medium text-white hover:bg-[var(--color-accent-2)] disabled:opacity-60"
+        className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-black hover:bg-[var(--color-accent-2)] disabled:opacity-60"
       >
         Crear tu primer proyecto
       </button>

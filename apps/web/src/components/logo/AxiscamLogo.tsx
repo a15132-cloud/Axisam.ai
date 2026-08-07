@@ -8,10 +8,11 @@ interface AxiscamLogoProps {
 }
 
 /**
- * Geometric "A" mark: blue leg + white leg meeting at the apex, with a
- * small floating crossbar - matches the brand reference. `animated`
- * drives the entrance draw-in and the slow shine sweep; set it false in
- * dense UI (sidebar rail icon) to keep motion budget for the hero spot.
+ * Geometric "A" mark: orange leg + orange-to-white leg meeting at the
+ * apex, with a small floating crossbar - black/orange/white, industrial
+ * rather than a generic SaaS blue gradient. `animated` drives the
+ * entrance draw-in and the slow shine sweep; set it false in dense UI
+ * (sidebar rail icon) to keep motion budget for the hero spot.
  */
 export function AxiscamLogo({ size = 40, animated = true, className }: AxiscamLogoProps) {
   const uid = useId().replace(/:/g, "");
@@ -44,8 +45,8 @@ export function AxiscamLogo({ size = 40, animated = true, className }: AxiscamLo
     >
       <defs>
         <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#2563eb" />
-          <stop offset="55%" stopColor="#60a5fa" />
+          <stop offset="0%" stopColor="#ff6a00" />
+          <stop offset="55%" stopColor="#ff9d52" />
           <stop offset="100%" stopColor="#ffffff" />
         </linearGradient>
         <linearGradient id={shineId} x1="0%" y1="0%" x2="100%" y2="0%">
@@ -65,7 +66,7 @@ export function AxiscamLogo({ size = 40, animated = true, className }: AxiscamLo
       <g filter={animated ? `url(#${glowId})` : undefined}>
         <motion.path
           d="M44,6 L50,6 L18,94 L10,94 Z"
-          fill="#2f6fed"
+          fill="#c94800"
           custom={0}
           variants={animated ? legVariants : undefined}
           initial={animated ? "hidden" : undefined}
@@ -81,7 +82,7 @@ export function AxiscamLogo({ size = 40, animated = true, className }: AxiscamLo
         />
         <motion.path
           d="M42,64 L58,64 L54,72 L46,72 Z"
-          fill="#3b82f6"
+          fill="#ff6a00"
           initial={animated ? { opacity: 0, y: -4 } : undefined}
           animate={animated ? { opacity: 1, y: 0 } : undefined}
           transition={{ delay: 0.55, duration: 0.4, ease: "easeOut" }}

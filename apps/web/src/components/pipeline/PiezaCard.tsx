@@ -159,7 +159,7 @@ function Field({ label, value }: { label: string; value: string }) {
   return (
     <div>
       <p className="text-[var(--color-text-faint)]">{label}</p>
-      <p className="mt-0.5 font-medium text-[var(--color-text)]">{value}</p>
+      <p className="font-mono mt-0.5 font-medium text-[var(--color-text)]">{value}</p>
     </div>
   );
 }

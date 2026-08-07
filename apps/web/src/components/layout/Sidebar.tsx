@@ -52,7 +52,7 @@ export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoPro
         <div className="flex items-center justify-between gap-2.5 px-4 py-4">
           <div className="flex items-center gap-2.5">
             <AxiscamLogo size={32} />
-            <span className="text-lg font-semibold tracking-tight text-gradient-brand">AXISCAM</span>
+            <span className="font-display text-xl font-semibold tracking-wide text-gradient-brand">AXISCAM</span>
           </div>
           <button onClick={onCerrar} className="rounded-lg p-1.5 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] lg:hidden" aria-label="Cerrar menú">
             <X className="h-5 w-5" />
@@ -64,7 +64,7 @@ export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoPro
             whileTap={{ scale: 0.97 }}
             onClick={onNuevoProyecto}
             disabled={creando}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-3 py-3 text-sm font-medium text-white transition-colors hover:bg-[var(--color-accent-2)] disabled:opacity-60 lg:py-2.5"
+            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-3 py-3 text-sm font-semibold text-black transition-colors hover:bg-[var(--color-accent-2)] disabled:opacity-60 lg:py-2.5"
           >
             <Plus className="h-4 w-4" /> Nuevo proyecto
           </motion.button>

@@ -31,7 +31,7 @@ export function PipelineStepper({ etapa }: { etapa: Etapa }) {
               <motion.div
                 animate={
                   status === "active"
-                    ? { boxShadow: ["0 0 0 0 rgba(59,130,246,0.5)", "0 0 0 8px rgba(59,130,246,0)"] }
+                    ? { boxShadow: ["0 0 0 0 rgba(255,106,0,0.5)", "0 0 0 8px rgba(255,106,0,0)"] }
                     : {}
                 }
                 transition={status === "active" ? { duration: 1.6, repeat: Infinity, ease: "easeOut" } : {}}
@@ -39,7 +39,7 @@ export function PipelineStepper({ etapa }: { etapa: Etapa }) {
                   status === "done"
                     ? "border-[var(--color-ok)] bg-[var(--color-ok)]/15 text-[var(--color-ok)]"
                     : status === "active"
-                      ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-white"
+                      ? "border-[var(--color-accent)] bg-[var(--color-accent)] text-black"
                       : "border-[var(--color-border)] bg-[var(--color-surface-2)] text-[var(--color-text-faint)]"
                 }`}
               >

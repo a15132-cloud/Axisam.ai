@@ -7,7 +7,7 @@ import * as THREE from "three";
 function StlMesh({ url }: { url: string }) {
   const geometry = useLoader(STLLoader, url);
   const material = useMemo(
-    () => new THREE.MeshStandardMaterial({ color: "#a9bede", metalness: 0.35, roughness: 0.4 }),
+    () => new THREE.MeshStandardMaterial({ color: "#c2beb4", metalness: 0.4, roughness: 0.38 }),
     []
   );
   return <mesh geometry={geometry} material={material} castShadow receiveShadow />;
@@ -23,7 +23,7 @@ export function StlViewer({ url }: { url: string }) {
   return (
     <div className="relative h-72 w-full overflow-hidden rounded-lg bg-gradient-to-b from-[var(--color-surface-2)] to-[var(--color-surface)]">
       <Canvas key={url} shadows camera={{ position: [90, 70, 90], fov: 38 }}>
-        <color attach="background" args={["#161b26"]} />
+        <color attach="background" args={["#1a1a1a"]} />
         <ambientLight intensity={0.7} />
         <directionalLight position={[80, 120, 60]} intensity={1.3} castShadow shadow-mapSize={[1024, 1024]} />
         <directionalLight position={[-70, 40, -60]} intensity={0.45} />

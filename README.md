@@ -88,35 +88,61 @@ panel de plano/vista 3D/actividad se accede con una pestaña "Detalles" junto al
 
 ## Desplegar a producción
 
-Este es un monorepo de dos servicios independientes, y **solo uno de los dos puede vivir en
-Vercel**:
+Este es un monorepo de **dos servicios independientes que deben desplegarse por separado** — este
+es el paso que causa el banner rojo "No se pudo conectar con el backend" si solo desplegaste uno
+de los dos. Vercel solo puede alojar el primero:
 
-- **`apps/web` (frontend) → Vercel.** El `vercel.json` en la raíz del repo ya le dice a Vercel
-  cómo construir este proyecto (`cd apps/web && npm install/build`, salida en `apps/web/dist`)
-  — si antes daba error era porque no había ningún `package.json` en la raíz del repo y Vercel
-  no tenía qué construir ahí. En el dashboard de Vercel, define la variable de entorno
-  `VITE_API_BASE_URL` con la URL pública de tu backend (siguiente punto) + `/api`, por ejemplo
-  `https://axiscam-api.tudominio.com/api`. Sin esta variable el frontend intenta llamar `/api`
-  en el propio dominio de Vercel, que no tiene backend detrás.
+| Servicio | Dónde | Qué hace |
+|---|---|---|
+| `apps/web` (frontend) | Vercel | La interfaz de chat que ves en el navegador |
+| `apps/orchestrator` (backend) | Render (u otro host de contenedores) | El trabajo real: llama a Claude, genera geometría, código G, etc. |
 
-- **`apps/orchestrator` (backend) → NO puede vivir en Vercel.** No es un error de configuración,
-  es un límite real de la plataforma: Vercel corre funciones serverless efímeras (sin disco
-  persistente, con límite de tiempo de ejecución), y este backend es un proceso FastAPI de larga
-  duración que guarda archivos en disco (planos subidos, STEP/STL/G-code generados) y depende de
-  `cadquery`/OpenCascade, una librería nativa pesada que no cabe cómodamente en el límite de
-  tamaño de una función serverless de Vercel. Se agregó un `Dockerfile` en `apps/orchestrator/`
-  listo para desplegar en **Railway, Render o Fly.io** (todos soportan "deploy from Dockerfile"
-  con un par de clics desde el repo de GitHub). Ahí necesitas configurar:
-  - `ANTHROPIC_API_KEY`
-  - `AXISCAM_CORS_ORIGINS=https://tu-proyecto.vercel.app` (el dominio real de tu frontend)
-  - Un volumen persistente montado en `/data` (si no, los archivos generados se pierden en cada
-    redeploy — para producción real, la migración natural es mover ese almacenamiento a algo
-    como S3, pero no era parte del alcance de esta fase)
+**Si el backend nunca se desplegó, el frontend en Vercel no tiene con quién hablar — por eso
+aparece "no se pudo conectar", aunque el frontend cargue perfectamente.** No es un bug del
+código: son dos despliegues separados y ambos son necesarios.
 
-  > Nota honesta: escribí y revisé el `Dockerfile` con cuidado, pero este sandbox no tiene un
-  > daemon de Docker corriendo, así que no pude ejecutar `docker build` para verificarlo de
-  > punta a punta. Si al desplegarlo algo falla (típicamente por un paquete del sistema faltante
-  > para las librerías nativas de `cadquery`), dímelo y lo ajusto.
+### Paso 1 — Backend en Render (el que probablemente falta)
+
+1. En https://dashboard.render.com → **New +** → **Blueprint** → conecta este repositorio de
+   GitHub y selecciona la rama con este código. Render detecta `render.yaml` en la raíz del repo
+   automáticamente y configura el servicio (usa el `Dockerfile` de `apps/orchestrator/`).
+2. Render te pedirá dos valores antes de desplegar:
+   - `ANTHROPIC_API_KEY` — tu clave de https://console.anthropic.com/settings/keys (esto es lo
+     que activa el chat con Claude y la lectura de planos — sin ella el resto de la app sigue
+     funcionando por botones, pero no el chat).
+   - `AXISCAM_CORS_ORIGINS` — la URL de tu frontend en Vercel, por ejemplo
+     `https://tu-proyecto.vercel.app` (sin `/` al final). Si esto no coincide exactamente con tu
+     dominio de Vercel, el navegador bloquea las llamadas y verás el mismo banner rojo aunque el
+     backend sí esté corriendo.
+3. Cuando termine el deploy, copia la URL pública que te da Render (algo como
+   `https://axiscam-orchestrator.onrender.com`).
+
+### Paso 2 — Apuntar Vercel a ese backend
+
+1. En el dashboard de tu proyecto en Vercel → **Settings** → **Environment Variables**.
+2. Agrega `VITE_API_BASE_URL` = la URL de Render del paso anterior + `/api`, por ejemplo
+   `https://axiscam-orchestrator.onrender.com/api`.
+3. **Redeploy** el proyecto en Vercel (las variables de entorno solo aplican en el próximo build,
+   no retroactivamente a un deploy que ya existe).
+
+Con eso el banner rojo debe desaparecer. Alternativas a Render con el mismo `Dockerfile`:
+Railway o Fly.io — ambos soportan "deploy from Dockerfile" desde el repo de GitHub, si prefieres
+alguno de esos en vez del blueprint de Render.
+
+> Nota honesta: escribí y revisé el `Dockerfile` y el `render.yaml` con cuidado, pero este
+> sandbox no tiene acceso a una cuenta de Render ni un daemon de Docker corriendo, así que no
+> pude ejecutar el despliegue de punta a punta yo mismo para confirmarlo. Si algo falla al
+> desplegar (típicamente un paquete de sistema faltante para las librerías nativas de
+> `cadquery`, o un typo en la clave de Render Blueprints como `runtime: docker`), copia el error
+> exacto del log de Render y lo corrijo.
+
+### Almacenamiento persistente
+
+El plan gratuito de Render (igual que Railway/Fly en su plan gratis) no incluye disco
+persistente: los planos subidos y los archivos STEP/STL/G-code generados se pierden en cada
+redeploy o reinicio del servicio. Para producción real con datos persistentes, sube a un plan de
+pago y agrega un disco montado en `/data`, o migra ese almacenamiento a algo como S3 — ninguna de
+las dos era parte del alcance de esta fase.
 
 ## Limitaciones conocidas (para no sorprenderse)
 

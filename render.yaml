@@ -1,0 +1,35 @@
+# Render Blueprint: despliega apps/orchestrator (el backend Python) con un
+# clic. En Render: "New +" -> "Blueprint" -> conecta este repo -> Render lee
+# este archivo automáticamente y crea el servicio.
+#
+# Por qué el backend no puede vivir en Vercel: Vercel solo sirve apps/web
+# (la interfaz estática). El backend es un proceso FastAPI de larga
+# duración con una dependencia nativa pesada (cadquery/OpenCascade) - no
+# cabe en el modelo de funciones serverless de Vercel. Necesita un host
+# de "servicio web" normal como este.
+services:
+  - type: web
+    name: axiscam-orchestrator
+    runtime: docker
+    dockerfilePath: ./apps/orchestrator/Dockerfile
+    dockerContext: ./apps/orchestrator
+    plan: free
+    healthCheckPath: /api/health
+    envVars:
+      # Requerida - sin esto el chat y la extracción de planos no funcionan.
+      # Consíguela en https://console.anthropic.com/settings/keys
+      - key: ANTHROPIC_API_KEY
+        sync: false
+      # Pon aquí la URL real de tu frontend en Vercel (https://tu-proyecto.vercel.app),
+      # SIN slash final. Sin esto el navegador bloquea las llamadas del
+      # frontend al backend por CORS - mismo síntoma que "no conecta".
+      - key: AXISCAM_CORS_ORIGINS
+        sync: false
+      - key: AXISCAM_STORAGE_DIR
+        value: /data
+
+# Nota honesta sobre almacenamiento: el plan "free" de Render NO soporta
+# discos persistentes - los planos/STEP/STL/G-code generados se pierden en
+# cada redeploy o reinicio del servicio (el mismo límite que ya aplicaba
+# con Railway/Fly en un plan gratuito). Para persistencia real, sube al
+# plan "Starter" o superior y agrega un bloque `disks:` montado en /data.

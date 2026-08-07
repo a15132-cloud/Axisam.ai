@@ -211,9 +211,13 @@ export default function App() {
         />
 
         {backendAlcanzable === false && (
-          <div className="border-b border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-2 text-center text-xs text-[var(--color-danger)]">
-            No se pudo conectar con el backend. La interfaz está cargando, pero nada es real todavía: revisa que{" "}
-            <code className="font-mono">VITE_API_BASE_URL</code> apunte al backend desplegado.
+          <div className="border-b border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-3 text-center text-xs text-[var(--color-danger)]">
+            No se pudo conectar con el backend — esta pantalla solo es la interfaz, y todavía no
+            encuentra el servicio que hace el trabajo real. Lo más probable es que el backend
+            (<code className="font-mono">apps/orchestrator</code>) no esté desplegado todavía, o que{" "}
+            <code className="font-mono">VITE_API_BASE_URL</code> en Vercel no apunte a su URL
+            correcta. Sigue la sección "Desplegar a producción" del README del proyecto — son 2
+            pasos.
           </div>
         )}
 

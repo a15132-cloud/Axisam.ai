@@ -72,6 +72,38 @@ uv run pytest
    velocidades/avances). Un usuario con nombre/usuario da la **aprobación final** — checkpoint 3.
 5. Solo entonces se exporta el código G (marcado como simulación pendiente de verificación).
 
+## Desplegar a producción
+
+Este es un monorepo de dos servicios independientes, y **solo uno de los dos puede vivir en
+Vercel**:
+
+- **`apps/web` (frontend) → Vercel.** El `vercel.json` en la raíz del repo ya le dice a Vercel
+  cómo construir este proyecto (`cd apps/web && npm install/build`, salida en `apps/web/dist`)
+  — si antes daba error era porque no había ningún `package.json` en la raíz del repo y Vercel
+  no tenía qué construir ahí. En el dashboard de Vercel, define la variable de entorno
+  `VITE_API_BASE_URL` con la URL pública de tu backend (siguiente punto) + `/api`, por ejemplo
+  `https://axiscam-api.tudominio.com/api`. Sin esta variable el frontend intenta llamar `/api`
+  en el propio dominio de Vercel, que no tiene backend detrás.
+
+- **`apps/orchestrator` (backend) → NO puede vivir en Vercel.** No es un error de configuración,
+  es un límite real de la plataforma: Vercel corre funciones serverless efímeras (sin disco
+  persistente, con límite de tiempo de ejecución), y este backend es un proceso FastAPI de larga
+  duración que guarda archivos en disco (planos subidos, STEP/STL/G-code generados) y depende de
+  `cadquery`/OpenCascade, una librería nativa pesada que no cabe cómodamente en el límite de
+  tamaño de una función serverless de Vercel. Se agregó un `Dockerfile` en `apps/orchestrator/`
+  listo para desplegar en **Railway, Render o Fly.io** (todos soportan "deploy from Dockerfile"
+  con un par de clics desde el repo de GitHub). Ahí necesitas configurar:
+  - `ANTHROPIC_API_KEY`
+  - `AXISCAM_CORS_ORIGINS=https://tu-proyecto.vercel.app` (el dominio real de tu frontend)
+  - Un volumen persistente montado en `/data` (si no, los archivos generados se pierden en cada
+    redeploy — para producción real, la migración natural es mover ese almacenamiento a algo
+    como S3, pero no era parte del alcance de esta fase)
+
+  > Nota honesta: escribí y revisé el `Dockerfile` con cuidado, pero este sandbox no tiene un
+  > daemon de Docker corriendo, así que no pude ejecutar `docker build` para verificarlo de
+  > punta a punta. Si al desplegarlo algo falla (típicamente por un paquete del sistema faltante
+  > para las librerías nativas de `cadquery`), dímelo y lo ajusto.
+
 ## Limitaciones conocidas (para no sorprenderse)
 
 - Sin `ANTHROPIC_API_KEY` configurada, la extracción de planos y el chat con el agente no

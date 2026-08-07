@@ -1,7 +1,22 @@
 import axios from "axios";
 import type { MaterialKB, Pieza, PostprocesadorKB, Proyecto } from "./types";
 
-const client = axios.create({ baseURL: "/api" });
+// In local dev, Vite's proxy (vite.config.ts) forwards "/api" to the backend
+// on :8001, so the default same-origin path works with no configuration. In
+// production (e.g. Vercel, which only serves this static frontend - it can't
+// run the Python backend) there is no backend at this origin, so the real
+// backend URL must be provided at build time via VITE_API_BASE_URL.
+const baseURL = import.meta.env.VITE_API_BASE_URL || "/api";
+
+if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
+  // eslint-disable-next-line no-console
+  console.warn(
+    "VITE_API_BASE_URL no está definida - la app intentará llamar a /api en este mismo dominio, " +
+      "que no tiene backend. Define VITE_API_BASE_URL con la URL del backend desplegado."
+  );
+}
+
+const client = axios.create({ baseURL });
 
 export class ApiError extends Error {
   status?: number;
@@ -65,8 +80,8 @@ export const api = {
   chat: (id: string, mensaje: string) =>
     unwrap<{ proyecto: Proyecto; respuesta: string; herramientas_ejecutadas: string[] }>(client.post(`/projects/${id}/chat`, { mensaje })),
 
-  archivoUrl: (id: string, nombre: string) => `/api/projects/${id}/files/${encodeURIComponent(nombre)}`,
-  planoOriginalUrl: (id: string) => `/api/projects/${id}/plano-original`,
+  archivoUrl: (id: string, nombre: string) => `${baseURL}/projects/${id}/files/${encodeURIComponent(nombre)}`,
+  planoOriginalUrl: (id: string) => `${baseURL}/projects/${id}/plano-original`,
 
   materiales: () => unwrap<MaterialKB[]>(client.get("/knowledge-base/materiales")),
   postprocesadores: () => unwrap<PostprocesadorKB[]>(client.get("/knowledge-base/postprocesadores")),

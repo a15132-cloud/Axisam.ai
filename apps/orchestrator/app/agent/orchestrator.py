@@ -102,7 +102,7 @@ def ejecutar_turno(
     for _ in range(MAX_ITERACIONES_HERRAMIENTAS):
         response = active_client.messages.create(
             model=settings.claude_model_agent,
-            max_tokens=2048,
+            max_tokens=4096,
             system=SYSTEM_PROMPT,
             tools=definitions.TODAS,
             messages=mensajes,

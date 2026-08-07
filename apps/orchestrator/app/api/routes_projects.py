@@ -10,7 +10,7 @@ never something the chat endpoint or the agent can trigger on its own.
 from __future__ import annotations
 
 import anthropic
-from fastapi import APIRouter, File, Form, Header, HTTPException, UploadFile
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app.agent import approval
@@ -24,50 +24,36 @@ from app.vision.extractor import ExtraccionError, extraer_pieza_desde_plano
 
 router = APIRouter(prefix="/api/projects", tags=["projects"])
 
-
-def _cliente_de_usuario(x_anthropic_api_key: str | None) -> anthropic.Anthropic | None:
-    """Bring-your-own-key: each browser can supply its own Anthropic API key
-    via this header (see apps/web/src/lib/apiKey.ts) so the party running
-    this backend never has to pay for every client's usage out of one
-    shared key. Never persisted anywhere - used to build a throwaway
-    client for this single request only, then discarded. Falls back to
-    the server's own ANTHROPIC_API_KEY (if configured) when the header is
-    absent, so existing single-operator/dev deployments keep working.
-    """
-    if x_anthropic_api_key:
-        return anthropic.Anthropic(api_key=x_anthropic_api_key)
-    return None
+# Client-facing wording deliberately never mentions "API key" or any setup
+# detail - whoever is chatting with Axiscam (a shop's client) shouldn't see
+# implementation jargon they can't act on, the same way a ChatGPT/Perplexity
+# user never sees "upstream API key" when something goes wrong on the
+# provider's end. Anthropic's own account/key configuration is entirely the
+# deploying operator's responsibility (one ANTHROPIC_API_KEY in the backend's
+# environment - see render.yaml) - the real exception detail still goes into
+# the project's activity log (registrar_evento) for that operator to diagnose.
+_MENSAJE_SERVICIO_NO_DISPONIBLE = (
+    "El asistente de IA no está disponible en este momento. Contacta al equipo de soporte."
+)
 
 
 def _http_desde_error_anthropic(exc: anthropic.AnthropicError) -> HTTPException:
-    """Anthropic SDK errors (bad key, no credit, rate limit, network) must
-    never reach the client as a raw 500 - a wrong/expired API key is the
-    single most likely failure now that BYOK means every user brings a
-    different key, and "Internal Server Error" gives them nothing to act
-    on. Maps to a clear, actionable message and the closest HTTP status.
+    """Anthropic SDK errors (bad/missing key, no credit, rate limit,
+    network) must never reach the client as a raw 500 - that used to
+    surface as an unreadable dump of the SDK's exception text. Maps to a
+    professional, jargon-free message and the closest sensible HTTP status.
     """
-    if isinstance(exc, anthropic.AuthenticationError):
-        return HTTPException(
-            status_code=401,
-            detail="Tu API key de Anthropic no es válida. Revísala en Configuración (arriba a la "
-            "derecha) - probablemente tiene un espacio de más o un carácter faltante al copiarla.",
-        )
     if isinstance(exc, anthropic.RateLimitError):
         return HTTPException(
             status_code=429,
-            detail="Tu cuenta de Anthropic alcanzó su límite de uso o de créditos por ahora. "
-            "Revisa el saldo/límites en console.anthropic.com e intenta de nuevo en un momento.",
+            detail="El asistente de IA alcanzó su límite de uso por ahora. Intenta de nuevo en "
+            "unos minutos.",
         )
-    if isinstance(exc, anthropic.PermissionDeniedError):
-        return HTTPException(
-            status_code=403,
-            detail="Tu API key de Anthropic no tiene permiso para usar el modelo configurado. "
-            "Revisa los permisos de la key en console.anthropic.com.",
-        )
+    if isinstance(exc, (anthropic.AuthenticationError, anthropic.PermissionDeniedError)):
+        return HTTPException(status_code=503, detail=_MENSAJE_SERVICIO_NO_DISPONIBLE)
     return HTTPException(
         status_code=502,
-        detail=f"No se pudo completar la solicitud a Anthropic ({exc.__class__.__name__}). "
-        "Intenta de nuevo en un momento; si sigue fallando, revisa tu API key en Configuración.",
+        detail="No se pudo completar la solicitud al asistente de IA. Intenta de nuevo en un momento.",
     )
 
 
@@ -124,12 +110,7 @@ def eliminar_proyecto(project_id: str) -> dict:
 
 
 @router.post("/{project_id}/plano")
-async def subir_plano(
-    project_id: str,
-    archivo: UploadFile = File(...),
-    instrucciones: str | None = Form(None),
-    x_anthropic_api_key: str | None = Header(default=None, alias="X-Anthropic-Api-Key"),
-) -> Proyecto:
+async def subir_plano(project_id: str, archivo: UploadFile = File(...), instrucciones: str | None = Form(None)) -> Proyecto:
     proyecto = _obtener_o_404(project_id)
     contenido = await archivo.read()
     storage.guardar_plano_subido(project_id, archivo.filename or "plano", contenido)
@@ -140,17 +121,18 @@ async def subir_plano(
 
     try:
         resultado = extraer_pieza_desde_plano(
-            contenido,
-            archivo.content_type or "",
-            archivo.filename or "plano",
-            instrucciones,
-            client=_cliente_de_usuario(x_anthropic_api_key),
+            contenido, archivo.content_type or "", archivo.filename or "plano", instrucciones
         )
     except ExtraccionError as exc:
         proyecto.etapa = Etapa.ERROR
         proyecto.registrar_evento("Error extrayendo datos del plano", detalle=str(exc))
         storage.guardar_proyecto(proyecto)
         raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        proyecto.etapa = Etapa.ERROR
+        proyecto.registrar_evento("Servicio de IA no configurado", detalle=str(exc))
+        storage.guardar_proyecto(proyecto)
+        raise HTTPException(status_code=503, detail=_MENSAJE_SERVICIO_NO_DISPONIBLE) from exc
     except anthropic.AnthropicError as exc:
         proyecto.etapa = Etapa.ERROR
         proyecto.registrar_evento("Error de Anthropic extrayendo datos del plano", detalle=str(exc))
@@ -268,16 +250,12 @@ def exportar_codigo_g(project_id: str) -> dict:
 
 
 @router.post("/{project_id}/chat")
-def chat(
-    project_id: str,
-    body: ChatBody,
-    x_anthropic_api_key: str | None = Header(default=None, alias="X-Anthropic-Api-Key"),
-) -> dict:
+def chat(project_id: str, body: ChatBody) -> dict:
     proyecto = _obtener_o_404(project_id)
     try:
-        resultado = ejecutar_turno(proyecto, body.mensaje, client=_cliente_de_usuario(x_anthropic_api_key))
+        resultado = ejecutar_turno(proyecto, body.mensaje)
     except RuntimeError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+        raise HTTPException(status_code=503, detail=_MENSAJE_SERVICIO_NO_DISPONIBLE) from exc
     except anthropic.AnthropicError as exc:
         raise _http_desde_error_anthropic(exc) from exc
     storage.guardar_proyecto(proyecto)

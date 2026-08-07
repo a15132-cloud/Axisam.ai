@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import { Cpu, KeyRound, Menu, Wifi, WifiOff } from "lucide-react";
+import { Cpu, Menu, Wifi, WifiOff } from "lucide-react";
 import { PipelineStepper } from "../pipeline/PipelineStepper";
 import type { Etapa } from "../../lib/types";
 
@@ -9,9 +9,7 @@ interface HeaderProps {
   nombreProyecto: string;
   etapa: Etapa | null;
   anthropicConfigurado: boolean | null;
-  tieneApiKeyPropia: boolean;
   onAbrirMenu: () => void;
-  onAbrirConfiguracion: () => void;
   vistaMobile: VistaMobile;
   onCambiarVistaMobile: (vista: VistaMobile) => void;
   mostrarSwitchMobile: boolean;
@@ -21,14 +19,11 @@ export function Header({
   nombreProyecto,
   etapa,
   anthropicConfigurado,
-  tieneApiKeyPropia,
   onAbrirMenu,
-  onAbrirConfiguracion,
   vistaMobile,
   onCambiarVistaMobile,
   mostrarSwitchMobile,
 }: HeaderProps) {
-  const agenteListo = !!anthropicConfigurado || tieneApiKeyPropia;
   return (
     <header className="flex flex-col border-b border-[var(--color-border)] bg-[var(--color-surface)]">
       <div className="hazard-stripe h-1 w-full opacity-80" />
@@ -48,37 +43,25 @@ export function Header({
             </div>
           </div>
 
-          <div className="flex shrink-0 items-center gap-2">
-            <motion.button
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              onClick={onAbrirConfiguracion}
-              className="flex items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-1.5 text-xs hover:bg-[var(--color-surface-3)]"
-              title="Configurar tu API key de Anthropic"
-            >
-              <Cpu className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
-              <span className="hidden text-[var(--color-text-muted)] sm:inline">Agente:</span>
-              {anthropicConfigurado === null ? (
-                <span className="text-[var(--color-text-faint)]">verificando…</span>
-              ) : agenteListo ? (
-                <span className="flex items-center gap-1 text-[var(--color-ok)]">
-                  <Wifi className="h-3 w-3" /> conectado
-                </span>
-              ) : (
-                <span className="flex items-center gap-1 text-[var(--color-warn)]">
-                  <WifiOff className="h-3 w-3" /> sin API key
-                </span>
-              )}
-            </motion.button>
-            <button
-              onClick={onAbrirConfiguracion}
-              className="rounded-lg p-2 text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
-              title="Configuración"
-              aria-label="Configuración"
-            >
-              <KeyRound className="h-4 w-4" />
-            </button>
-          </div>
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-1.5 text-xs"
+          >
+            <Cpu className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
+            <span className="hidden text-[var(--color-text-muted)] sm:inline">Asistente:</span>
+            {anthropicConfigurado === null ? (
+              <span className="text-[var(--color-text-faint)]">verificando…</span>
+            ) : anthropicConfigurado ? (
+              <span className="flex items-center gap-1 text-[var(--color-ok)]">
+                <Wifi className="h-3 w-3" /> en línea
+              </span>
+            ) : (
+              <span className="flex items-center gap-1 text-[var(--color-warn)]">
+                <WifiOff className="h-3 w-3" /> no disponible
+              </span>
+            )}
+          </motion.div>
         </div>
 
         {etapa && <PipelineStepper etapa={etapa} />}

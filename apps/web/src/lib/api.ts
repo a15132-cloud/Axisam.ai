@@ -1,5 +1,4 @@
 import axios from "axios";
-import { obtenerApiKey } from "./apiKey";
 import type { BridgeWindowsStatus, MaterialKB, Pieza, PostprocesadorKB, Proyecto } from "./types";
 
 // In local dev, Vite's proxy (vite.config.ts) forwards "/api" to the backend
@@ -18,19 +17,6 @@ if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
 }
 
 const client = axios.create({ baseURL });
-
-// Bring-your-own-key: attach the user's own Anthropic key (if they saved
-// one via the Configuración modal) to every request. The backend only
-// reads this header for the two endpoints that actually call Claude
-// (subir plano, chat) - see app/api/routes_projects.py - and ignores it
-// everywhere else.
-client.interceptors.request.use((config) => {
-  const key = obtenerApiKey();
-  if (key) {
-    config.headers.set("X-Anthropic-Api-Key", key);
-  }
-  return config;
-});
 
 export class ApiError extends Error {
   status?: number;

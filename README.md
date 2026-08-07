@@ -107,15 +107,15 @@ código: son dos despliegues separados y ambos son necesarios.
    GitHub y selecciona la rama con este código. Render detecta `render.yaml` en la raíz del repo
    automáticamente y configura el servicio (usa el `Dockerfile` de `apps/orchestrator/`).
 2. Render te pedirá dos valores antes de desplegar:
-   - `ANTHROPIC_API_KEY` — **puedes dejarla en blanco.** Axiscam usa "bring your own key": cada
-     persona que use la app agrega su propia API key de Anthropic desde el botón "Configuración"
-     en la interfaz, y esa key se usa solo para sus propios mensajes — tú, como operador del
-     backend, nunca pagas el uso de tus clientes. Solo llena esto si quieres una key de respaldo
-     del lado del servidor (por ejemplo para tus propias pruebas).
+   - `ANTHROPIC_API_KEY` — tu clave de https://console.anthropic.com/settings/keys. Esta es la
+     **única** key que existe en todo el sistema — tus clientes jamás la ven ni tienen que
+     configurar nada, igual que en Perplexity, Grok o ChatGPT (ellos tampoco te piden una API key;
+     la empresa la paga por detrás). Ver la sección "Evitar quedarte sin créditos sin avisar" más
+     abajo antes de desplegar.
    - `AXISCAM_CORS_ORIGINS` — la URL de tu frontend en Vercel, por ejemplo
-     `https://tu-proyecto.vercel.app` (sin `/` al final). Esta sí es necesaria: si no coincide
-     exactamente con tu dominio de Vercel, el navegador bloquea las llamadas y verás el mismo
-     banner rojo aunque el backend sí esté corriendo.
+     `https://tu-proyecto.vercel.app` (sin `/` al final). Si no coincide exactamente con tu
+     dominio de Vercel, el navegador bloquea las llamadas y verás el mismo banner rojo aunque el
+     backend sí esté corriendo.
 3. Cuando termine el deploy, copia la URL pública que te da Render (algo como
    `https://axiscam-orchestrator.onrender.com`).
 
@@ -138,23 +138,32 @@ alguno de esos en vez del blueprint de Render.
 > `cadquery`, o un typo en la clave de Render Blueprints como `runtime: docker`), copia el error
 > exacto del log de Render y lo corrijo.
 
-## Cada cliente usa su propia API key de Anthropic ("bring your own key")
+## Una sola API key, invisible para tus clientes
 
 Axiscam necesita a Claude (Anthropic) para el chat y la lectura de planos — no hay forma honesta
-de tener un agente de IA real sin una API key real conectándolo a un modelo real. Lo que sí se
-puede evitar es que **tú** pagues el uso de **todos tus clientes** con una sola key: cada persona
-que abre Axiscam agrega su propia API key desde el botón "Configuración" (arriba a la derecha,
-ícono de llave). Esa key:
+de tener un agente de IA real sin una API key real conectándolo a un modelo real (ningún producto
+de IA escapa a esto, incluidos Perplexity, Grok o ChatGPT). Lo que sí es una decisión de diseño:
+**quién carga con esa key**. Axiscam usa una sola `ANTHROPIC_API_KEY` configurada por ti en el
+backend (Render) — tus clientes nunca ven ni configuran nada relacionado con IA, exactamente como
+en cualquier producto de IA orientado a consumidor. Si esa key llega a fallar (vencida, sin
+créditos, límite de uso alcanzado), el cliente ve un mensaje profesional y genérico en el chat en
+vez de un error técnico — el detalle real queda solo en el registro de actividad del proyecto,
+para que tú lo diagnostiques.
 
-- Se guarda solo en el navegador de esa persona (`localStorage`), nunca en el servidor.
-- Se manda como header (`X-Anthropic-Api-Key`) solo en las dos llamadas que realmente usan Claude
-  (subir plano, chat) — ver `_cliente_de_usuario` en `app/api/routes_projects.py`.
-- Nunca se escribe en el archivo del proyecto ni en ningún log del backend.
+### Evitar quedarte sin créditos sin avisar
 
-Conseguir una toma ~2 minutos en https://console.anthropic.com/settings/keys y es "pay-as-you-go"
-(se paga solo lo que se use, sin suscripción fija). Si el backend además tiene su propio
-`ANTHROPIC_API_KEY` configurado (opcional, ver `render.yaml`), esa sirve como respaldo cuando un
-usuario no ha puesto la suya todavía.
+Es pago por uso (no hay una versión "que no se acaba" — ningún proveedor de IA real la tiene,
+incluido el que usan Perplexity/Grok por detrás), pero sí puedes evitar sorpresas de facturación:
+
+1. En https://console.anthropic.com, ve a **Settings → Limits** y configura un **límite de gasto
+   mensual** (spending limit). Al llegar a ese límite, la API simplemente deja de responder en vez
+   de seguir cobrando — Axiscam ya maneja ese caso mostrando el mensaje profesional mencionado
+   arriba en vez de un error técnico.
+2. Activa las **alertas de uso por correo** en la misma sección, para enterarte antes de llegar al
+   límite, no cuando ya se cortó el servicio.
+3. Una conversación típica de Axiscam (unos mensajes + extraer un plano) cuesta centavos de dólar,
+   no dólares — para calibrar cuánto poner de límite mensual según cuántos proyectos esperas
+   procesar.
 
 ### Almacenamiento persistente
 

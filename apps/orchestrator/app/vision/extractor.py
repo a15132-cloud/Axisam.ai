@@ -92,9 +92,13 @@ def extraer_pieza_desde_plano(
     client: anthropic.Anthropic | None = None,
 ) -> ResultadoExtraccion:
     if not settings.anthropic_api_key and client is None:
-        raise ExtraccionError(
-            "Falta una API key de Anthropic para leer el plano. Agrega la tuya en Configuración "
-            "(arriba a la derecha) - se usa solo para esta extracción, nunca se guarda en el servidor."
+        # RuntimeError, not ExtraccionError: this is an operator/deployment
+        # misconfiguration (see app/api/routes_projects.py), not something
+        # about the plano itself - it must never be shown to the end client
+        # verbatim the way genuine extraction errors below are.
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY no esta configurada en el servidor - define esa variable de entorno "
+            "en el despliegue del backend (ver render.yaml) para poder leer planos."
         )
 
     content_blocks = _build_content_blocks(contenido, media_type, nombre_archivo)

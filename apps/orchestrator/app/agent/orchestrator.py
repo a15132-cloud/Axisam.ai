@@ -81,9 +81,8 @@ def ejecutar_turno(
 ) -> ResultadoTurno:
     if not settings.anthropic_api_key and client is None:
         raise RuntimeError(
-            "Falta una API key de Anthropic para activar el chat. Agrega la tuya en "
-            "Configuración (arriba a la derecha) - se usa solo para tus mensajes, nunca se "
-            "guarda en el servidor."
+            "ANTHROPIC_API_KEY no esta configurada en el servidor - define esa variable de entorno "
+            "en el despliegue del backend (ver render.yaml) para activar el chat."
         )
 
     active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key)

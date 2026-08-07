@@ -16,13 +16,13 @@ services:
     plan: free
     healthCheckPath: /api/health
     envVars:
-      # OPCIONAL desde que existe "bring your own key": cada persona que usa
-      # Axiscam agrega su propia API key de Anthropic en la app (botón
-      # "Configuración") y esa key se usa solo para sus propios mensajes -
-      # quien despliega este backend no paga el uso de sus clientes con una
-      # key compartida. Puedes dejar esto vacío. Solo tiene sentido llenarlo
-      # si quieres una key de respaldo del lado del servidor (por ejemplo
-      # para tus propias pruebas sin tener que configurar una en el navegador).
+      # Necesaria para que el chat y la lectura de planos funcionen. Es la
+      # ÚNICA key que existe - tus clientes nunca ven ni configuran nada,
+      # exactamente igual que en Perplexity/Grok/ChatGPT (ellos tampoco te
+      # piden una API key, la empresa la paga por detrás). Consíguela en
+      # https://console.anthropic.com/settings/keys - configura ahí mismo
+      # un límite de gasto mensual para no llevarte sorpresas de facturación
+      # (ver sección "Evitar quedarte sin créditos" en el README).
       - key: ANTHROPIC_API_KEY
         sync: false
       # Pon aquí la URL real de tu frontend en Vercel (https://tu-proyecto.vercel.app),

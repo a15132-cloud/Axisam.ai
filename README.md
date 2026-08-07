@@ -16,15 +16,22 @@ infraestructura, el sistema está dividido así:
 | Capa 1 — Chat / UI | **Real y funcional** (React) |
 | Capa 2 — Orquestador (loop de tool-use con Claude) | **Real y funcional** (FastAPI + Anthropic SDK) |
 | Capa 3 — Visión / extracción del plano | **Real y funcional** (Claude multimodal), requiere `ANTHROPIC_API_KEY` |
-| Capa 4 — SolidWorks (modelado 3D) | **Geometría real**, generada con un kernel OpenCascade (`cadquery`) en vez de la COM API de SolidWorks. Produce archivos STEP/STL reales, abribles en SolidWorks hoy mismo. |
-| Capa 4 — Mastercam (trayectorias / código G) | **Simulación basada en reglas**, claramente etiquetada como tal. Genera trayectoria de corte real para taladrado (G81/G83), cajeras (desbaste en zigzag con radio de herramienta compensado) y contornos exteriores/redondeos (offset con esquinas correctamente redondeadas) — no solo taladros. Sigue sin chequeo de colisiones entre features simultáneos, sin rampas de entrada, y features sin suficiente geometría en el JSON (p.ej. escalón) quedan como planeación sin trayectoria. **Ningún código G de este sistema debe cargarse a una máquina sin que Mastercam real lo verifique.** |
+| Capa 4 — SolidWorks (modelado 3D) | **Geometría real por defecto**, generada con un kernel OpenCascade (`cadquery`) — produce archivos STEP/STL reales, abribles en SolidWorks hoy mismo. **SolidWorks real cuando está disponible**: si `apps/windows-bridge` corre en tu propia PC con Windows con SolidWorks instalado, el orquestador lo detecta y prefiere automáticamente su salida en vez del motor simulado (ver más abajo). |
+| Capa 4 — Mastercam (trayectorias / código G) | **Simulación basada en reglas**, claramente etiquetada como tal. Genera trayectoria de corte real para taladrado (G81/G83), cajeras (desbaste en zigzag con radio de herramienta compensado) y contornos exteriores/redondeos (offset con esquinas correctamente redondeadas) — no solo taladros. Sigue sin chequeo de colisiones entre features simultáneos, sin rampas de entrada, y features sin suficiente geometría en el JSON (p.ej. escalón) quedan como planeación sin trayectoria. **Ningún código G de este sistema debe cargarse a una máquina sin que Mastercam real lo verifique.** El conector de Mastercam real en `apps/windows-bridge` existe pero es honesto sobre su alcance: detecta la instalación, no automatiza todavía (ver `apps/windows-bridge/README.md`). |
 | Capa 5 — Base de conocimiento de manufactura | **Real**, tabla de decisión explícita (YAML + Python), datos semilla pendientes de validar por un maquinista |
 | Capa 6 — Aprobación humana | **Real y aplicado en el backend** — cada transición de aprobación es un endpoint dedicado que ningún tool-call del LLM puede invocar por su cuenta |
 
-Cuando el servidor Windows con SolidWorks/Mastercam esté listo, el plan es sustituir
-`app/geometry/builder.py` por llamadas COM reales y construir el servicio .NET para Mastercam
-SDK detrás de los mismos endpoints — el contrato JSON (`Pieza`, `ToolpathPlan`) no cambia.
-Ver `docs/architecture.md` para el detalle de esa migración.
+## Conectar tu SolidWorks/Mastercam real (`apps/windows-bridge`)
+
+Este repo también incluye un servicio .NET opcional (`apps/windows-bridge`) que, corriendo en
+tu propia PC con Windows con SolidWorks/Mastercam instalados, hace que Axiscam use el software
+real en vez del motor simulado — sin configuración manual. El orquestador intenta conectarse a
+`http://127.0.0.1:5757` en cada generación de modelo/código G con un timeout corto; si no hay
+nada ahí (el caso normal en este sandbox, en un servidor, o en cualquier máquina sin SolidWorks),
+sigue usando el motor simulado exactamente como hoy. Si el bridge está corriendo, la interfaz
+muestra un indicador ("SolidWorks real" / "Motor simulado") en cada modelo y código G generado,
+y en el pie del menú lateral. Ver `apps/windows-bridge/README.md` para instalación, alcance real
+verificado, y cómo terminar el conector de Mastercam.
 
 ## Estructura
 
@@ -32,6 +39,8 @@ Ver `docs/architecture.md` para el detalle de esa migración.
 apps/
   orchestrator/   Backend Python (FastAPI) - Capas 2, 3, 4, 5, 6
   web/            Frontend React - Capa 1
+  windows-bridge/ Servicio .NET opcional - conecta la Capa 4 a SolidWorks/Mastercam reales
+                  en la PC Windows del usuario (ver apps/windows-bridge/README.md)
 docs/
   architecture.md Detalle técnico de cada capa y el plan de migración a SolidWorks/Mastercam reales
 ```

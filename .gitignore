@@ -14,5 +14,10 @@ uv.lock.bak
 # Data generated at runtime (uploaded planos, generated STEP/STL/G-code, project JSON)
 apps/orchestrator/data/
 
+# .NET (apps/windows-bridge)
+bin/
+obj/
+apps/windows-bridge/dist/
+
 # OS
 .DS_Store

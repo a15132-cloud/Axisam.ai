@@ -1,0 +1,60 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- COM interop (Marshal.GetActiveObject, etc.) is Windows-only. -->
+    <EnableComHosting>false</EnableComHosting>
+    <!-- Point this at your SOLIDWORKS install's api\redist folder, e.g.
+         C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\api\redist
+         Different SOLIDWORKS versions ship slightly different interop
+         DLLs/signatures - if FeatureExtrusion2/FeatureCut4/HoleWizard5
+         calls in SolidWorksService.cs don't match your installed
+         version's overloads, that's the first place to look. -->
+    <SolidWorksInteropPath Condition="'$(SolidWorksInteropPath)' == ''">C:\Program Files\SOLIDWORKS Corp\SOLIDWORKS\api\redist</SolidWorksInteropPath>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AxiscamBridge.Api\AxiscamBridge.Api.csproj" />
+  </ItemGroup>
+
+  <!-- These three assemblies exist only inside a SOLIDWORKS installation -
+       they are not published as a NuGet package. This project (and only
+       this project) is skipped entirely when they aren't found, which is
+       what lets AxiscamBridge.Api build and run on any machine regardless
+       of whether SOLIDWORKS is installed - see PluginLoader.cs. -->
+  <ItemGroup Condition="Exists('$(SolidWorksInteropPath)\SolidWorks.Interop.sldworks.dll')">
+    <Reference Include="SolidWorks.Interop.sldworks">
+      <HintPath>$(SolidWorksInteropPath)\SolidWorks.Interop.sldworks.dll</HintPath>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swconst">
+      <HintPath>$(SolidWorksInteropPath)\SolidWorks.Interop.swconst.dll</HintPath>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
+    <Reference Include="SolidWorks.Interop.swpublished">
+      <HintPath>$(SolidWorksInteropPath)\SolidWorks.Interop.swpublished.dll</HintPath>
+      <EmbedInteropTypes>true</EmbedInteropTypes>
+    </Reference>
+  </ItemGroup>
+
+  <ItemGroup Condition="!Exists('$(SolidWorksInteropPath)\SolidWorks.Interop.sldworks.dll')">
+    <Compile Remove="SolidWorksService.cs" />
+  </ItemGroup>
+
+  <!-- PluginLoader looks for this DLL next to the Api project's own
+       output, not here - there's deliberately no compile-time reference
+       the other direction (Api -> SolidWorks) for that to happen via the
+       normal build graph. build.ps1 is the robust way to assemble one
+       output folder across Debug/Release and both TFMs; this best-effort
+       copy just makes a plain `dotnet build` from this project also work
+       for local iteration. -->
+  <Target Name="CopiarJuntoAApi" AfterTargets="Build">
+    <ItemGroup>
+      <_ApiOutputDirs Include="..\AxiscamBridge.Api\bin\$(Configuration)\*\" />
+    </ItemGroup>
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="%(_ApiOutputDirs.Identity)" ContinueOnError="true" Condition="Exists('%(_ApiOutputDirs.Identity)')" />
+  </Target>
+
+</Project>

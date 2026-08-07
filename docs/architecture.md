@@ -60,13 +60,22 @@ Restricciones deliberadas (documentadas en el código, no ocultas):
   para que el humano los vea en el checkpoint de revisión del modelo, no solo en un toast que
   desaparece.
 
-### Migración a SolidWorks real
+### Migración a SolidWorks real — implementada
 
-Cuando exista el servidor Windows: escribir un servicio C#/.NET que exponga los mismos verbos
-(`crear sólido desde Pieza -> exportar STEP/STL`) vía la SolidWorks COM API, y hacer que
-`app/tools/handlers.py::generar_modelo_3d` llame a ese servicio (HTTP/gRPC) en vez de a
-`app.geometry.builder`. El resto del pipeline (Capa 2, 5, 6, frontend) no necesita cambios porque
-consume el mismo contrato `Pieza -> archivos STEP/STL + advertencias`.
+Este servicio ya existe: `apps/windows-bridge/src/AxiscamBridge.SolidWorks` es un proyecto
+C#/.NET que expone la misma operación (`Pieza -> STEP/STL`) vía la SolidWorks COM API
+(`FeatureExtrusion2`, `FeatureCut4`, `SaveAs`), servido por `AxiscamBridge.Api` en
+`http://127.0.0.1:5757`. `app/tools/handlers.py::generar_modelo_3d` llama primero a
+`app/integrations/windows_bridge.py::generar_modelo_solidworks` (HTTP con timeout corto) y solo
+cae al motor `cadquery` si ese bridge no está corriendo o SolidWorks no está disponible ahí — el
+resto del pipeline (Capa 2, 5, 6, frontend) no cambió, porque ambos caminos devuelven el mismo
+contrato `Pieza -> archivos STEP/STL + advertencias`, y el resultado marca `es_simulacion: false`
+cuando viene de SolidWorks real.
+
+Lo que sigue pendiente: el conector fue escrito con cuidado contra la API documentada y estable
+de SolidWorks, pero **no se ha ejecutado todavía contra una instalación real** — ningún sandbox
+usado para construirlo tenía SolidWorks instalado. Ver `apps/windows-bridge/README.md`, sección
+"Honest status", para el alcance exacto verificado vs. pendiente de primera prueba real.
 
 ## Capa 4/5 — Mastercam: por qué es honestamente una simulación
 
@@ -113,13 +122,22 @@ el ciclo fijo, y los barrenos 2..N dejarían de maquinarse sin ningún error vis
 regresión. Es el tipo de error que un "parece razonable" no detecta — solo generar el G-code real
 y revisarlo con cuidado lo hizo evidente.
 
-### Migración a Mastercam real
+### Migración a Mastercam real — el enganche existe, la automatización no
 
-Escribir el servicio C#/.NET usando Mastercam SDK (NET-Hooks/C-Hooks) que reciba el STEP
-generado por Capa 4 (SolidWorks) y el `ToolpathPlan` ya calculado por `app/cam/planner.py` (que
-sigue siendo útil como *plan* incluso con Mastercam real generando la geometría de corte), y que
-devuelva código G verificado. `app/tools/handlers.py::exportar_codigo_g` cambia para llamar a ese
-servicio en vez de a `app.cam.gcode`.
+`app/tools/handlers.py::exportar_codigo_g` ya intenta primero
+`app/integrations/windows_bridge.py::generar_codigo_g_mastercam` contra el mismo bridge de
+`apps/windows-bridge`, y solo cae a `app.cam.gcode` si no hay respuesta real — el mismo patrón
+que SolidWorks. Lo que falta es el otro lado: `AxiscamBridge.Mastercam.MastercamService` hoy solo
+detecta si Mastercam está instalado (por filesystem, sin COM) y reporta `EstaDisponible = false`
+a propósito, porque a diferencia de SolidWorks, Mastercam no expone una API de automatización
+externa estable y universal — su mecanismo principal son los Net-Hooks, DLLs C# que Mastercam
+*carga dentro de sí mismo* y corre desde su propia UI, no algo que un proceso externo invoque por
+HTTP. Completar esto significa escribir un Net-Hook contra el SDK de la versión de Mastercam
+instalada, que reciba el STEP generado por Capa 4 y el `ToolpathPlan` ya calculado por
+`app/cam/planner.py` (que sigue siendo útil como *plan* incluso con Mastercam real generando la
+geometría de corte), y que le entregue el código G resultante de vuelta a
+`MastercamService.GenerarCodigoGAsync` — ver "Completing the Mastercam connector" en
+`apps/windows-bridge/README.md`.
 
 ## Capa 5 — base de conocimiento
 

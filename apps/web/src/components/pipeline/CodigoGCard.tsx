@@ -19,6 +19,7 @@ export function CodigoGCard({
   advertencias: string[];
 }) {
   const gcode = [...archivos].reverse().find((a) => a.tipo === "gcode");
+  const esSimulacion = gcode?.es_simulacion ?? true;
 
   return (
     <motion.div
@@ -26,19 +27,34 @@ export function CodigoGCard({
       animate={{ opacity: 1, scale: 1 }}
       className="w-full rounded-lg border border-[var(--color-ok)]/40 bg-[var(--color-surface-2)] p-4"
     >
-      <div className="mb-3 flex items-center gap-2">
-        <PartyPopper className="h-4 w-4 text-[var(--color-ok)]" />
-        <h4 className="text-sm font-semibold text-[var(--color-text)]">Código G exportado</h4>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center gap-2">
+          <PartyPopper className="h-4 w-4 text-[var(--color-ok)]" />
+          <h4 className="text-sm font-semibold text-[var(--color-text)]">Código G exportado</h4>
+        </div>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+            esSimulacion
+              ? "bg-[var(--color-surface-3)] text-[var(--color-text-faint)]"
+              : "bg-[var(--color-ok)]/15 text-[var(--color-ok)]"
+          }`}
+          title={esSimulacion ? "Generado con el motor CAM simulado" : "Generado con Mastercam real via apps/windows-bridge"}
+        >
+          {esSimulacion ? "Motor simulado" : "Mastercam real"}
+        </span>
       </div>
 
       <div className="rounded-lg border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-3 py-2.5 text-xs text-[var(--color-danger)]">
         <div className="flex items-start gap-2">
           <AlertOctagon className="mt-0.5 h-4 w-4 shrink-0" />
           <p>
-            Simulación pendiente de verificar con Mastercam real. {operacionesConMovimientoReal} operación(es) tienen
-            trayectoria de corte real calculada (taladrado, cajeras, contornos); {operacionesSoloPlaneadas} quedaron
-            solo planeadas (geometría no soportada aún - requieren Mastercam real). Sin chequeo de colisiones entre
-            features simultáneos. Un maquinista debe revisar el archivo completo antes de cargarlo en la máquina CNC.
+            {esSimulacion
+              ? "Simulación pendiente de verificar con Mastercam real."
+              : "Generado con Mastercam real, pero sigue pendiente de revisión antes de máquina."}{" "}
+            {operacionesConMovimientoReal} operación(es) tienen trayectoria de corte real calculada (taladrado,
+            cajeras, contornos); {operacionesSoloPlaneadas} quedaron solo planeadas (geometría no soportada aún).
+            Sin chequeo de colisiones entre features simultáneos. Un maquinista debe revisar el archivo completo
+            antes de cargarlo en la máquina CNC.
           </p>
         </div>
       </div>

@@ -20,9 +20,23 @@ export function ModeloCard({ proyectoId, archivos, advertencias, featuresOmitido
   const stl = archivos.find((a) => a.tipo === "stl");
   const step = archivos.find((a) => a.tipo === "step");
 
+  const esSimulacion = stl?.es_simulacion ?? step?.es_simulacion ?? true;
+
   return (
     <div className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
-      <h4 className="mb-3 text-sm font-semibold text-[var(--color-text)]">Modelo 3D generado</h4>
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <h4 className="text-sm font-semibold text-[var(--color-text)]">Modelo 3D generado</h4>
+        <span
+          className={`rounded-full px-2 py-0.5 text-[10px] font-medium uppercase tracking-wide ${
+            esSimulacion
+              ? "bg-[var(--color-surface-3)] text-[var(--color-text-faint)]"
+              : "bg-[var(--color-ok)]/15 text-[var(--color-ok)]"
+          }`}
+          title={esSimulacion ? "Generado con el motor de geometría simulado (cadquery)" : "Generado con SolidWorks real via apps/windows-bridge"}
+        >
+          {esSimulacion ? "Motor simulado" : "SolidWorks real"}
+        </span>
+      </div>
 
       {stl && (
         <ErrorBoundary compact>

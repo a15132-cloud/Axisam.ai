@@ -97,3 +97,52 @@ def test_pipeline_completo_respeta_los_tres_checkpoints(tmp_path, monkeypatch):
     resultado_gcode = handlers.exportar_codigo_g(p)
     assert resultado_gcode["es_simulacion"] is True
     assert any(a.tipo == "gcode" for a in p.archivos)
+
+
+# --- Capa 4 handlers deben preferir el bridge de Windows real cuando esta disponible ---
+
+
+def test_generar_modelo_3d_usa_bridge_real_cuando_esta_disponible(tmp_path, monkeypatch):
+    import base64
+
+    def _guardar_bytes(project_id, nombre, contenido):
+        ruta = tmp_path / nombre
+        ruta.write_bytes(contenido)
+        return ruta
+
+    monkeypatch.setattr(handlers.storage, "guardar_bytes", _guardar_bytes)
+    monkeypatch.setattr(
+        handlers.windows_bridge,
+        "generar_modelo_solidworks",
+        lambda pieza: {
+            "archivo_step_base64": base64.b64encode(b"STEP").decode(),
+            "archivo_stl_base64": base64.b64encode(b"STL").decode(),
+            "nombre_archivo": "placa_soporte",
+            "advertencias": [],
+            "features_omitidos": [],
+            "propiedades_geometricas": {"volumen_mm3": 1.0, "area_superficial_mm2": 1.0, "bbox_mm": {"x": 1, "y": 1, "z": 1}},
+        },
+    )
+
+    p = _proyecto_recien_extraido()
+    approval.confirmar_extraccion(p)
+
+    resultado = handlers.generar_modelo_3d(p)
+
+    assert resultado["generado_con"] == "solidworks_real"
+    assert p.etapa == Etapa.ESPERANDO_CONFIRMACION_MODELO
+    assert all(a.es_simulacion is False for a in p.archivos)
+
+
+def test_generar_modelo_3d_propaga_bridge_error_sin_caer_a_simulacion(monkeypatch):
+    def _falla(pieza):
+        raise handlers.windows_bridge.BridgeError("SOLIDWORKS lanzo una excepcion COM")
+
+    monkeypatch.setattr(handlers.windows_bridge, "generar_modelo_solidworks", _falla)
+
+    p = _proyecto_recien_extraido()
+    approval.confirmar_extraccion(p)
+
+    with pytest.raises(handlers.windows_bridge.BridgeError):
+        handlers.generar_modelo_3d(p)
+    assert p.etapa == Etapa.ERROR

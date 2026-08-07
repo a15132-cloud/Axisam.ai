@@ -72,6 +72,12 @@ def guardar_texto(project_id: str, nombre: str, contenido: str) -> Path:
     return ruta
 
 
+def guardar_bytes(project_id: str, nombre: str, contenido: bytes) -> Path:
+    ruta = _archivos_dir(project_id) / nombre
+    ruta.write_bytes(contenido)
+    return ruta
+
+
 def ruta_plano_subido(project_id: str, nombre: str) -> Path:
     d = _proyectos_dir() / project_id / "plano"
     d.mkdir(parents=True, exist_ok=True)

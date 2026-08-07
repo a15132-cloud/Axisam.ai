@@ -1,7 +1,7 @@
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, MessageSquare, Trash2, X } from "lucide-react";
+import { Plus, MessageSquare, Trash2, X, Cable } from "lucide-react";
 import { AxiscamLogo } from "../logo/AxiscamLogo";
-import type { Proyecto } from "../../lib/types";
+import type { BridgeWindowsStatus, Proyecto } from "../../lib/types";
 
 const ETAPA_DOT: Record<Proyecto["etapa"], string> = {
   plano_subido: "bg-[var(--color-text-faint)]",
@@ -26,9 +26,33 @@ interface SidebarProps {
   creando: boolean;
   abierto: boolean;
   onCerrar: () => void;
+  bridgeWindows: BridgeWindowsStatus | null;
 }
 
-export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoProyecto, onEliminar, creando, abierto, onCerrar }: SidebarProps) {
+function EstadoBridge({ bridgeWindows }: { bridgeWindows: BridgeWindowsStatus | null }) {
+  const conectado = !!bridgeWindows;
+  const swOk = bridgeWindows?.solidworks_disponible;
+  const mcOk = bridgeWindows?.mastercam_disponible;
+
+  const texto = !conectado
+    ? "Bridge de Windows no detectado - usando motor simulado"
+    : swOk
+      ? `SolidWorks real conectado${bridgeWindows?.version_solidworks ? ` (${bridgeWindows.version_solidworks})` : ""}`
+      : "Bridge conectado, SolidWorks no disponible aquí";
+
+  return (
+    <div
+      className="flex items-center gap-2 border-t border-[var(--color-border)] px-4 py-3 text-[11px] text-[var(--color-text-faint)]"
+      title="apps/windows-bridge: conecta Axiscam a SolidWorks/Mastercam reales cuando corre en tu propia PC con Windows"
+    >
+      <Cable className={`h-3.5 w-3.5 shrink-0 ${swOk ? "text-[var(--color-ok)]" : "text-[var(--color-text-faint)]"}`} />
+      <span className="min-w-0 flex-1 truncate">{texto}</span>
+      {conectado && mcOk && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-ok)]" title="Mastercam también disponible" />}
+    </div>
+  );
+}
+
+export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoProyecto, onEliminar, creando, abierto, onCerrar, bridgeWindows }: SidebarProps) {
   return (
     <>
       {/* Backdrop - mobile only, closes the drawer on tap outside */}
@@ -100,6 +124,8 @@ export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoPro
             </div>
           ))}
         </div>
+
+        <EstadoBridge bridgeWindows={bridgeWindows} />
       </aside>
     </>
   );

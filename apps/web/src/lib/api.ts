@@ -1,5 +1,5 @@
 import axios from "axios";
-import type { MaterialKB, Pieza, PostprocesadorKB, Proyecto } from "./types";
+import type { BridgeWindowsStatus, MaterialKB, Pieza, PostprocesadorKB, Proyecto } from "./types";
 
 // In local dev, Vite's proxy (vite.config.ts) forwards "/api" to the backend
 // on :8001, so the default same-origin path works with no configuration. In
@@ -53,9 +53,14 @@ function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
 }
 
 export const api = {
-  health: () => unwrap<{ status: string; anthropic_configurado: boolean; capa4_solidworks: string; capa4_mastercam: string }>(
-    client.get("/health")
-  ),
+  health: () =>
+    unwrap<{
+      status: string;
+      anthropic_configurado: boolean;
+      capa4_solidworks: string;
+      capa4_mastercam: string;
+      bridge_windows: BridgeWindowsStatus | null;
+    }>(client.get("/health")),
 
   crearProyecto: (nombre: string) => unwrap<Proyecto>(client.post("/projects", { nombre })),
   listarProyectos: () => unwrap<Proyecto[]>(client.get("/projects")),

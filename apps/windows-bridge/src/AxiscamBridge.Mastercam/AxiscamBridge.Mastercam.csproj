@@ -1,0 +1,29 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\AxiscamBridge.Api\AxiscamBridge.Api.csproj" />
+  </ItemGroup>
+
+  <!-- Unlike SOLIDWORKS, Mastercam does not have one stable, universally
+       documented external-automation COM object across versions - most
+       of its automation story is NET-Hooks (C# plugins Mastercam LOADS
+       INTO ITSELF, not something an outside process calls over HTTP) and
+       the details genuinely vary by installed version. This project
+       always compiles (see MastercamService.cs's own comments for what
+       is and isn't implemented) rather than being conditionally excluded
+       like the SOLIDWORKS project - there is no equivalent interop DLL
+       existence check that would be meaningful here. -->
+  <Target Name="CopiarJuntoAApi" AfterTargets="Build">
+    <ItemGroup>
+      <_ApiOutputDirs Include="..\AxiscamBridge.Api\bin\$(Configuration)\*\" />
+    </ItemGroup>
+    <Copy SourceFiles="$(TargetPath)" DestinationFolder="%(_ApiOutputDirs.Identity)" ContinueOnError="true" Condition="Exists('%(_ApiOutputDirs.Identity)')" />
+  </Target>
+
+</Project>

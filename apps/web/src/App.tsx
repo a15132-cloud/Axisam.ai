@@ -5,7 +5,7 @@ import { ChatPanel } from "./components/chat/ChatPanel";
 import { RightPanel } from "./components/pipeline/RightPanel";
 import { api, ApiError } from "./lib/api";
 import { derivarEntriesPipeline } from "./lib/deriveEntries";
-import type { ChatEntry, Pieza, Proyecto } from "./lib/types";
+import type { BridgeWindowsStatus, ChatEntry, Pieza, Proyecto } from "./lib/types";
 
 function uid() {
   return Math.random().toString(36).slice(2);
@@ -25,6 +25,7 @@ export default function App() {
   const [mensajesLibres, setMensajesLibres] = useState<ChatEntry[]>([]);
   const [anthropicConfigurado, setAnthropicConfigurado] = useState<boolean | null>(null);
   const [backendAlcanzable, setBackendAlcanzable] = useState<boolean | null>(null);
+  const [bridgeWindows, setBridgeWindows] = useState<BridgeWindowsStatus | null>(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [vistaMobile, setVistaMobile] = useState<VistaMobile>("chat");
@@ -41,6 +42,7 @@ export default function App() {
       .then((h) => {
         setAnthropicConfigurado(h.anthropic_configurado);
         setBackendAlcanzable(true);
+        setBridgeWindows(h.bridge_windows);
       })
       .catch(() => {
         setAnthropicConfigurado(false);
@@ -194,6 +196,7 @@ export default function App() {
         creando={creando}
         abierto={menuAbierto}
         onCerrar={() => setMenuAbierto(false)}
+        bridgeWindows={bridgeWindows}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">

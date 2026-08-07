@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import routes_files, routes_kb, routes_projects
 from app.config import settings
+from app.integrations import windows_bridge
 
 app = FastAPI(
     title="Axiscam Orchestrator",
@@ -28,9 +29,13 @@ app.include_router(routes_kb.router)
 
 @app.get("/api/health")
 def health() -> dict:
+    bridge = windows_bridge.estado_bridge()
     return {
         "status": "ok",
         "anthropic_configurado": bool(settings.anthropic_api_key),
-        "capa4_solidworks": "geometria real via cadquery/OpenCascade - pendiente de sustituir por COM API en servidor Windows",
-        "capa4_mastercam": "simulacion basada en reglas - pendiente de integracion con Mastercam SDK",
+        "capa4_solidworks": "geometria simulada via cadquery/OpenCascade - se usa SolidWorks real automaticamente "
+        "cuando apps/windows-bridge esta corriendo en la maquina del usuario (ver bridge_windows)",
+        "capa4_mastercam": "trayectorias simuladas basadas en reglas - se usara Mastercam real automaticamente "
+        "cuando el conector correspondiente este implementado en apps/windows-bridge (ver bridge_windows)",
+        "bridge_windows": bridge,
     }

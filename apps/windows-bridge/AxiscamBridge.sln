@@ -1,0 +1,41 @@
+﻿
+Microsoft Visual Studio Solution File, Format Version 12.00
+# Visual Studio Version 17
+VisualStudioVersion = 17.0.31903.59
+MinimumVisualStudioVersion = 10.0.40219.1
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{4A636CAC-BF10-4E45-B14B-FABA463A1623}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AxiscamBridge.Api", "src\AxiscamBridge.Api\AxiscamBridge.Api.csproj", "{4C20E731-7DD4-483C-A8F3-CA56047F1152}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AxiscamBridge.SolidWorks", "src\AxiscamBridge.SolidWorks\AxiscamBridge.SolidWorks.csproj", "{A5D43C1C-6808-470E-9449-AC6B027FDAA0}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "AxiscamBridge.Mastercam", "src\AxiscamBridge.Mastercam\AxiscamBridge.Mastercam.csproj", "{10476B25-751E-4C04-A2F8-34FDC3586D4D}"
+EndProject
+Global
+	GlobalSection(SolutionConfigurationPlatforms) = preSolution
+		Debug|Any CPU = Debug|Any CPU
+		Release|Any CPU = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(SolutionProperties) = preSolution
+		HideSolutionNode = FALSE
+	EndGlobalSection
+	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4C20E731-7DD4-483C-A8F3-CA56047F1152}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4C20E731-7DD4-483C-A8F3-CA56047F1152}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4C20E731-7DD4-483C-A8F3-CA56047F1152}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4C20E731-7DD4-483C-A8F3-CA56047F1152}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A5D43C1C-6808-470E-9449-AC6B027FDAA0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A5D43C1C-6808-470E-9449-AC6B027FDAA0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A5D43C1C-6808-470E-9449-AC6B027FDAA0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A5D43C1C-6808-470E-9449-AC6B027FDAA0}.Release|Any CPU.Build.0 = Release|Any CPU
+		{10476B25-751E-4C04-A2F8-34FDC3586D4D}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{10476B25-751E-4C04-A2F8-34FDC3586D4D}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{10476B25-751E-4C04-A2F8-34FDC3586D4D}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{10476B25-751E-4C04-A2F8-34FDC3586D4D}.Release|Any CPU.Build.0 = Release|Any CPU
+	EndGlobalSection
+	GlobalSection(NestedProjects) = preSolution
+		{4C20E731-7DD4-483C-A8F3-CA56047F1152} = {4A636CAC-BF10-4E45-B14B-FABA463A1623}
+		{A5D43C1C-6808-470E-9449-AC6B027FDAA0} = {4A636CAC-BF10-4E45-B14B-FABA463A1623}
+		{10476B25-751E-4C04-A2F8-34FDC3586D4D} = {4A636CAC-BF10-4E45-B14B-FABA463A1623}
+	EndGlobalSection
+EndGlobal

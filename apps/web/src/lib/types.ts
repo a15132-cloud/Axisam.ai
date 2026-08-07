@@ -215,3 +215,16 @@ export type ChatEntry =
       advertencias: string[];
     }
   | { id: string; role: "assistant"; kind: "error"; ts: string; texto: string };
+
+// Reported by GET /api/health via app/integrations/windows_bridge.py.
+// Non-null only when apps/windows-bridge is actually running and reachable
+// on the machine hosting the orchestrator - typically the user's own
+// Windows shop-floor PC, never this dev/hosted deployment.
+export interface BridgeWindowsStatus {
+  status: string;
+  solidworks_disponible: boolean;
+  mastercam_disponible: boolean;
+  version_solidworks?: string | null;
+  version_mastercam?: string | null;
+  detalle?: string | null;
+}

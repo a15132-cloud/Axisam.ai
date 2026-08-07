@@ -114,9 +114,10 @@ Vercel**:
 - Sin `ANTHROPIC_API_KEY` configurada, la extracción de planos y el chat con el agente no
   funcionan — el resto del pipeline (confirmar, generar, aprobar) sigue operando desde botones
   directos en la interfaz.
-- El motor de geometría (Capa 4 SolidWorks) no soporta todavía: bases no rectangulares/circulares,
-  escalones, perfiles exteriores no rectangulares, ni features en caras laterales. Se reportan
-  como advertencia explícita en vez de modelarse a ciegas.
+- El motor de geometría (Capa 4 SolidWorks) soporta barrenos en caras laterales de piezas
+  rectangulares (`cara: lateral_izquierda/derecha/frontal/posterior`). Sigue sin soportar: bases
+  no rectangulares/circulares, escalones, perfiles exteriores no rectangulares, ni cajeras/ranuras
+  en caras laterales. Se reportan como advertencia explícita en vez de modelarse a ciegas.
 - El código G tiene trayectoria de corte real para taladrado, cajeras/ranuras y contornos
   exteriores/redondeos; features sin geometría suficiente en el JSON (p.ej. escalón) quedan como
   planeación (herramienta + velocidades) sin trayectoria, hasta integrar Mastercam real. Ninguna

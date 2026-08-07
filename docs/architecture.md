@@ -47,9 +47,17 @@ Restricciones deliberadas (documentadas en el código, no ocultas):
   arbitrario.
 - Formas base no soportadas (`poligonal`, `revolucion`) lanzan `GeometryBuildError` en vez de
   adivinar geometría — un plano mal interpretado geométricamente es peor que un error claro.
-- Features no soportados (`escalon`, `perfil_exterior`, caras laterales) se reportan en
-  `features_omitidos` y se persisten en el proyecto (`Proyecto.features_omitidos_modelo`) para
-  que el humano los vea en el checkpoint de revisión del modelo, no solo en un toast que
+- Barrenos en caras laterales (`cara: lateral_izquierda/derecha/frontal/posterior`) sí están
+  soportados en piezas de base rectangular: cada cara tiene su propio par de ejes documentado en
+  `CARAS_LATERALES` (`app/geometry/builder.py`) - `posicion.x` es la distancia a lo largo de esa
+  cara, `posicion.y` es la altura (Z), sin importar cuál de las 4 caras sea. La herramienta de
+  corte se construye con `cq.Solid.makeCylinder(radio, altura, pnt=origen, dir=direccion)` en vez
+  de un `Workplane` con un plano con nombre (`"YZ"`/`"XZ"`) para no depender de memorizar la
+  convención de normales de esos planes en cadquery - el punto y la dirección son explícitos y se
+  verifican con un test que calcula el volumen removido exacto (πr²·longitud) para las 4 caras.
+- Features no soportados (`escalon`, `perfil_exterior`, cajeras/ranuras en caras laterales) se
+  reportan en `features_omitidos` y se persisten en el proyecto (`Proyecto.features_omitidos_modelo`)
+  para que el humano los vea en el checkpoint de revisión del modelo, no solo en un toast que
   desaparece.
 
 ### Migración a SolidWorks real

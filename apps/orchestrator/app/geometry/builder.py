@@ -14,7 +14,9 @@ COM API while keeping the exact same `build_pieza` -> STEP/STL contract.
 
 Deliberately unsupported (raise GeometryBuildError instead of guessing):
 - forma_base = poligonal / revolucion (no profile geometry in the schema)
-- features on lateral_* faces
+- pockets/slots on lateral_* faces (barrenos are supported there - see
+  CARAS_LATERALES - but a rectangular cut needs a second in-plane axis
+  convention this schema doesn't carry yet)
 - feature.tipo = escalon, perfil_exterior (need explicit boundary geometry)
 Everything unsupported surfaces as a clear warning or error so a human
 catches it at the Capa 6 model-preview checkpoint - never modeled blindly.
@@ -27,10 +29,42 @@ from dataclasses import dataclass, field
 
 import cadquery as cq
 
-from app.schemas.piece import Feature, FormaBase, Pieza, Posicion2D, TipoFeature
+from app.schemas.piece import Dimensiones, Feature, FormaBase, Pieza, Posicion2D, TipoFeature
 
 MARGEN_CORTE_MM = 1.0
 PROFUNDIDAD_CIEGA_DEFAULT_FRACCION = 0.5
+
+# Side-face drilling convention: for a rectangular part spanning
+# X in [0, largo], Y in [0, ancho], Z in [0, espesor], each lateral face
+# gets its own 2D coordinate frame - feature.posicion.x runs along the
+# face's width axis, feature.posicion.y runs up the part's height (Z) -
+# so the same (x, y) meaning ("distance across", "distance up") applies
+# no matter which of the four side faces a hole is on. `origen` maps that
+# 2D position to a 3D world point on the face; `direccion` is the drilling
+# axis (always pointing INTO the part); `longitud_max` is the full-through
+# depth along that axis.
+CARAS_LATERALES = {
+    "lateral_izquierda": {  # X = 0 face
+        "origen": lambda pos, d: (0.0, pos.x, pos.y),
+        "direccion": (1.0, 0.0, 0.0),
+        "longitud_max": lambda d: d.largo_mm,
+    },
+    "lateral_derecha": {  # X = largo face
+        "origen": lambda pos, d: (d.largo_mm, pos.x, pos.y),
+        "direccion": (-1.0, 0.0, 0.0),
+        "longitud_max": lambda d: d.largo_mm,
+    },
+    "lateral_frontal": {  # Y = 0 face
+        "origen": lambda pos, d: (pos.x, 0.0, pos.y),
+        "direccion": (0.0, 1.0, 0.0),
+        "longitud_max": lambda d: d.ancho_mm,
+    },
+    "lateral_posterior": {  # Y = ancho face
+        "origen": lambda pos, d: (pos.x, d.ancho_mm, pos.y),
+        "direccion": (0.0, -1.0, 0.0),
+        "longitud_max": lambda d: d.ancho_mm,
+    },
+}
 
 
 class GeometryBuildError(Exception):
@@ -70,6 +104,25 @@ def _cortar_barreno(solido: cq.Workplane, feature: Feature, pos: Posicion2D, esp
     z0, dz = _rango_z(feature, espesor)
     diametro = feature.diametro_mm or 5.0
     herramienta = _workplane_en(pos.x, pos.y, z0).circle(diametro / 2).extrude(dz)
+    return solido.cut(herramienta)
+
+
+def _cortar_barreno_lateral(
+    solido: cq.Workplane, feature: Feature, pos: Posicion2D, dims: Dimensiones, cara: str
+) -> cq.Workplane:
+    config = CARAS_LATERALES[cara]
+    ox, oy, oz = config["origen"](pos, dims)
+    dx, dy, dz = config["direccion"]
+    longitud_total = config["longitud_max"](dims)
+    profundidad = longitud_total if feature.pasante else (feature.profundidad_mm or longitud_total * PROFUNDIDAD_CIEGA_DEFAULT_FRACCION)
+
+    radio = (feature.diametro_mm or 5.0) / 2
+    # Start the cylinder MARGEN_CORTE_MM outside the face so the boolean
+    # cut has clean overlap at the surface, regardless of face orientation.
+    punto_inicio = cq.Vector(ox - dx * MARGEN_CORTE_MM, oy - dy * MARGEN_CORTE_MM, oz - dz * MARGEN_CORTE_MM)
+    direccion = cq.Vector(dx, dy, dz)
+    herramienta_shape = cq.Solid.makeCylinder(radio, profundidad + MARGEN_CORTE_MM, pnt=punto_inicio, dir=direccion)
+    herramienta = cq.Workplane(obj=herramienta_shape)
     return solido.cut(herramienta)
 
 
@@ -134,10 +187,6 @@ def build_pieza(pieza: Pieza) -> BuildResult:
         if f.tipo in (TipoFeature.REDONDEO, TipoFeature.CHAFLAN):
             continue  # already handled above
 
-        if f.cara and f.cara.startswith("lateral"):
-            omitidos.append(f"{f.tipo.value} (id={f.id or '?'}): caras laterales no soportadas aun")
-            continue
-
         if f.patron_incompleto:
             advertencias.append(
                 f"{f.tipo.value} (id={f.id or '?'}): cantidad={f.cantidad} pero solo se conoce "
@@ -149,9 +198,29 @@ def build_pieza(pieza: Pieza) -> BuildResult:
             omitidos.append(f"{f.tipo.value} (id={f.id or '?'}): sin posicion conocida, no se pudo modelar")
             continue
 
+        es_lateral = bool(f.cara and f.cara.startswith("lateral"))
+        if es_lateral and f.cara not in CARAS_LATERALES:
+            omitidos.append(
+                f"{f.tipo.value} (id={f.id or '?'}): cara '{f.cara}' no reconocida - usar lateral_izquierda, "
+                "lateral_derecha, lateral_frontal o lateral_posterior"
+            )
+            continue
+        if es_lateral and dims.forma_base != FormaBase.RECTANGULAR:
+            omitidos.append(f"{f.tipo.value} (id={f.id or '?'}): caras laterales solo soportadas en piezas de base rectangular")
+            continue
+        if es_lateral and f.tipo not in (TipoFeature.BARRENO, TipoFeature.BARRENO_ROSCADO):
+            omitidos.append(
+                f"{f.tipo.value} (id={f.id or '?'}) en cara '{f.cara}': solo barrenos estan soportados en caras "
+                "laterales por ahora - modelar manualmente en SolidWorks."
+            )
+            continue
+
         for pos in posiciones:
             if f.tipo in (TipoFeature.BARRENO, TipoFeature.BARRENO_ROSCADO):
-                solido = _cortar_barreno(solido, f, pos, dims.espesor_mm)
+                if es_lateral:
+                    solido = _cortar_barreno_lateral(solido, f, pos, dims, f.cara)
+                else:
+                    solido = _cortar_barreno(solido, f, pos, dims.espesor_mm)
                 if f.tipo == TipoFeature.BARRENO_ROSCADO:
                     advertencias.append(
                         f"barreno_roscado {f.rosca or ''} (id={f.id or '?'}): modelado como barreno liso "

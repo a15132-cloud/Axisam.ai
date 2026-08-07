@@ -69,3 +69,86 @@ def test_feature_no_soportado_se_omite_no_crashea():
     pieza.features.append(Feature(id="f3", tipo=TipoFeature.ESCALON, ancho_mm=10, largo_mm=10, profundidad_mm=2))
     resultado = build_pieza(pieza)
     assert any("escalon" in o for o in resultado.features_omitidos)
+
+
+@pytest.mark.parametrize(
+    "cara,eje_extremo",
+    [
+        ("lateral_izquierda", "x"),
+        ("lateral_derecha", "x"),
+        ("lateral_frontal", "y"),
+        ("lateral_posterior", "y"),
+    ],
+)
+def test_barreno_lateral_atraviesa_la_pieza_correcta(cara, eje_extremo):
+    import math
+
+    pieza = Pieza(
+        pieza="bloque",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="f1", tipo=TipoFeature.BARRENO, diametro_mm=6, cara=cara, posicion=Posicion2D(x=30, y=5))],
+    )
+    resultado = build_pieza(pieza)
+    assert resultado.features_omitidos == [], resultado.features_omitidos
+
+    props = calcular_propiedades(resultado.solido)
+    volumen_esperado = 100 * 60 * 10 - math.pi * 3**2 * (100 if eje_extremo == "x" else 60)
+    assert props["volumen_mm3"] == pytest.approx(volumen_esperado, rel=0.01)
+    # a full through-hole must not change the part's outer bounding box
+    assert props["bbox_mm"]["x"] == pytest.approx(100.0, abs=0.05)
+    assert props["bbox_mm"]["y"] == pytest.approx(60.0, abs=0.05)
+    assert props["bbox_mm"]["z"] == pytest.approx(10.0, abs=0.05)
+
+
+def test_barreno_lateral_ciego_no_atraviesa():
+    pieza = Pieza(
+        pieza="bloque",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(
+                id="f1", tipo=TipoFeature.BARRENO, diametro_mm=6, cara="lateral_izquierda",
+                posicion=Posicion2D(x=30, y=5), pasante=False, profundidad_mm=20,
+            )
+        ],
+    )
+    resultado = build_pieza(pieza)
+    assert resultado.features_omitidos == []
+    # a blind hole must not reach all the way through to the opposite face
+    assert resultado.solido.val().Volume() > 100 * 60 * 10 - (100 * 60 * 10 * 0.5)
+
+
+def test_barreno_lateral_cara_desconocida_se_omite():
+    pieza = Pieza(
+        pieza="bloque",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="f1", tipo=TipoFeature.BARRENO, diametro_mm=6, cara="lateral_arriba", posicion=Posicion2D(x=30, y=5))],
+    )
+    resultado = build_pieza(pieza)
+    assert any("no reconocida" in o for o in resultado.features_omitidos)
+
+
+def test_cajera_en_cara_lateral_se_omite_no_crashea():
+    pieza = Pieza(
+        pieza="bloque",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="f1", tipo=TipoFeature.CAJERA, ancho_mm=10, largo_mm=10, cara="lateral_frontal", posicion=Posicion2D(x=30, y=5))
+        ],
+    )
+    resultado = build_pieza(pieza)
+    assert any("solo barrenos" in o for o in resultado.features_omitidos)
+
+
+def test_barreno_lateral_en_base_circular_se_omite():
+    pieza = Pieza(
+        pieza="disco",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.CIRCULAR, diametro_mm=50, espesor_mm=10),
+        features=[Feature(id="f1", tipo=TipoFeature.BARRENO, diametro_mm=6, cara="lateral_izquierda", posicion=Posicion2D(x=5, y=5))],
+    )
+    resultado = build_pieza(pieza)
+    assert any("base rectangular" in o for o in resultado.features_omitidos)

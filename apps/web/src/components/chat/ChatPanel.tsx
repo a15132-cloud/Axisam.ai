@@ -99,7 +99,7 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
           >
             <Paperclip className="h-4 w-4" />
           </button>
-          <input ref={fileInputRef} type="file" accept=".pdf,.png,.jpg,.jpeg,.webp,.dxf,.dwg" className="hidden" onChange={manejarArchivo} />
+          <input ref={fileInputRef} type="file" className="hidden" onChange={manejarArchivo} />
           <textarea
             value={texto}
             onChange={(e) => setTexto(e.target.value)}

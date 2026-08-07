@@ -81,7 +81,11 @@ def _build_content_blocks(contenido: bytes, media_type: str, nombre_archivo: str
             "software CAD y vuelve a subirlo."
         )
 
-    raise FormatoNoSoportado(f"Tipo de archivo no soportado: '{media_type or 'desconocido'}' ({nombre_archivo})")
+    raise FormatoNoSoportado(
+        f"No se puede leer '{nombre_archivo}' (tipo '{media_type or 'desconocido'}'). Formatos soportados: "
+        "imagenes (PNG, JPG, WEBP, GIF), PDF, y DXF. Si tu plano esta en otro formato (DWG, Word, Excel, etc.), "
+        "expórtalo como PDF o imagen desde tu software y vuelve a subirlo."
+    )
 
 
 def extraer_pieza_desde_plano(

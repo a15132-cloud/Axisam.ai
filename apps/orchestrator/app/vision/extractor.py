@@ -93,8 +93,8 @@ def extraer_pieza_desde_plano(
 ) -> ResultadoExtraccion:
     if not settings.anthropic_api_key and client is None:
         raise ExtraccionError(
-            "ANTHROPIC_API_KEY no esta configurada en el servidor. Define la variable de entorno "
-            "antes de subir un plano."
+            "Falta una API key de Anthropic para leer el plano. Agrega la tuya en Configuración "
+            "(arriba a la derecha) - se usa solo para esta extracción, nunca se guarda en el servidor."
         )
 
     content_blocks = _build_content_blocks(contenido, media_type, nombre_archivo)
@@ -115,17 +115,21 @@ def extraer_pieza_desde_plano(
         "input_schema": _tool_schema(),
     }
 
-    try:
-        response = active_client.messages.create(
-            model=settings.claude_model_vision,
-            max_tokens=8192,
-            system=SYSTEM_PROMPT,
-            tools=[tool],
-            tool_choice={"type": "tool", "name": TOOL_NAME},
-            messages=[{"role": "user", "content": content_blocks}],
-        )
-    except anthropic.APIError as exc:
-        raise ExtraccionError(f"Error llamando a Claude para extraer el plano: {exc}") from exc
+    # anthropic.AnthropicError (bad key, rate limit, network) is deliberately
+    # left to propagate uncaught here - app/api/routes_projects.py maps it to
+    # a clean, actionable HTTP error (see _http_desde_error_anthropic). This
+    # used to be wrapped into a generic ExtraccionError with the raw
+    # exception text, which meant a bad API key surfaced as an unreadable
+    # dump of Anthropic's internal error JSON instead of "tu API key no es
+    # valida" - now both the chat and extraction paths share one message.
+    response = active_client.messages.create(
+        model=settings.claude_model_vision,
+        max_tokens=8192,
+        system=SYSTEM_PROMPT,
+        tools=[tool],
+        tool_choice={"type": "tool", "name": TOOL_NAME},
+        messages=[{"role": "user", "content": content_blocks}],
+    )
 
     tool_use = next((b for b in response.content if b.type == "tool_use" and b.name == TOOL_NAME), None)
     if tool_use is None:

@@ -3,7 +3,9 @@ import { Sidebar } from "./components/layout/Sidebar";
 import { Header, type VistaMobile } from "./components/layout/Header";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { RightPanel } from "./components/pipeline/RightPanel";
+import { ApiKeyModal } from "./components/settings/ApiKeyModal";
 import { api, ApiError } from "./lib/api";
+import { obtenerApiKey } from "./lib/apiKey";
 import { derivarEntriesPipeline } from "./lib/deriveEntries";
 import type { BridgeWindowsStatus, ChatEntry, Pieza, Proyecto } from "./lib/types";
 
@@ -26,6 +28,8 @@ export default function App() {
   const [anthropicConfigurado, setAnthropicConfigurado] = useState<boolean | null>(null);
   const [backendAlcanzable, setBackendAlcanzable] = useState<boolean | null>(null);
   const [bridgeWindows, setBridgeWindows] = useState<BridgeWindowsStatus | null>(null);
+  const [tieneApiKeyPropia, setTieneApiKeyPropia] = useState(() => !!obtenerApiKey());
+  const [configuracionAbierta, setConfiguracionAbierta] = useState(false);
   const [cargandoInicial, setCargandoInicial] = useState(true);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [vistaMobile, setVistaMobile] = useState<VistaMobile>("chat");
@@ -204,10 +208,18 @@ export default function App() {
           nombreProyecto={proyecto?.nombre ?? "Axiscam"}
           etapa={proyecto?.etapa ?? null}
           anthropicConfigurado={anthropicConfigurado}
+          tieneApiKeyPropia={tieneApiKeyPropia}
           onAbrirMenu={() => setMenuAbierto(true)}
+          onAbrirConfiguracion={() => setConfiguracionAbierta(true)}
           vistaMobile={vistaMobile}
           onCambiarVistaMobile={setVistaMobile}
           mostrarSwitchMobile={!!proyecto}
+        />
+
+        <ApiKeyModal
+          abierto={configuracionAbierta}
+          onCerrar={() => setConfiguracionAbierta(false)}
+          onGuardado={setTieneApiKeyPropia}
         />
 
         {backendAlcanzable === false && (
@@ -232,7 +244,7 @@ export default function App() {
             ) : (
               <ChatPanel
                 entries={entries}
-                puedeChatear={!!anthropicConfigurado}
+                puedeChatear={!!anthropicConfigurado || tieneApiKeyPropia}
                 enviando={enviando}
                 subiendo={subiendo}
                 onEnviarMensaje={enviarMensaje}

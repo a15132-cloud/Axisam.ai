@@ -86,8 +86,9 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
       <div className="border-t border-[var(--color-border)] p-3 sm:p-4">
         {!puedeChatear && (
           <p className="mb-2 text-[11px] text-[var(--color-text-faint)]">
-            El chat con IA requiere ANTHROPIC_API_KEY configurada en el servidor - las acciones del pipeline (confirmar,
-            generar, aprobar) siguen funcionando desde las tarjetas de arriba.
+            El chat con IA necesita tu API key de Anthropic - agrégala en "Configuración" (arriba a
+            la derecha). Las acciones del pipeline (confirmar, generar, aprobar) siguen funcionando
+            desde las tarjetas de arriba mientras tanto.
           </p>
         )}
         <div className="flex items-end gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-2">

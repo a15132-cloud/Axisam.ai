@@ -107,13 +107,15 @@ código: son dos despliegues separados y ambos son necesarios.
    GitHub y selecciona la rama con este código. Render detecta `render.yaml` en la raíz del repo
    automáticamente y configura el servicio (usa el `Dockerfile` de `apps/orchestrator/`).
 2. Render te pedirá dos valores antes de desplegar:
-   - `ANTHROPIC_API_KEY` — tu clave de https://console.anthropic.com/settings/keys (esto es lo
-     que activa el chat con Claude y la lectura de planos — sin ella el resto de la app sigue
-     funcionando por botones, pero no el chat).
+   - `ANTHROPIC_API_KEY` — **puedes dejarla en blanco.** Axiscam usa "bring your own key": cada
+     persona que use la app agrega su propia API key de Anthropic desde el botón "Configuración"
+     en la interfaz, y esa key se usa solo para sus propios mensajes — tú, como operador del
+     backend, nunca pagas el uso de tus clientes. Solo llena esto si quieres una key de respaldo
+     del lado del servidor (por ejemplo para tus propias pruebas).
    - `AXISCAM_CORS_ORIGINS` — la URL de tu frontend en Vercel, por ejemplo
-     `https://tu-proyecto.vercel.app` (sin `/` al final). Si esto no coincide exactamente con tu
-     dominio de Vercel, el navegador bloquea las llamadas y verás el mismo banner rojo aunque el
-     backend sí esté corriendo.
+     `https://tu-proyecto.vercel.app` (sin `/` al final). Esta sí es necesaria: si no coincide
+     exactamente con tu dominio de Vercel, el navegador bloquea las llamadas y verás el mismo
+     banner rojo aunque el backend sí esté corriendo.
 3. Cuando termine el deploy, copia la URL pública que te da Render (algo como
    `https://axiscam-orchestrator.onrender.com`).
 
@@ -135,6 +137,24 @@ alguno de esos en vez del blueprint de Render.
 > desplegar (típicamente un paquete de sistema faltante para las librerías nativas de
 > `cadquery`, o un typo en la clave de Render Blueprints como `runtime: docker`), copia el error
 > exacto del log de Render y lo corrijo.
+
+## Cada cliente usa su propia API key de Anthropic ("bring your own key")
+
+Axiscam necesita a Claude (Anthropic) para el chat y la lectura de planos — no hay forma honesta
+de tener un agente de IA real sin una API key real conectándolo a un modelo real. Lo que sí se
+puede evitar es que **tú** pagues el uso de **todos tus clientes** con una sola key: cada persona
+que abre Axiscam agrega su propia API key desde el botón "Configuración" (arriba a la derecha,
+ícono de llave). Esa key:
+
+- Se guarda solo en el navegador de esa persona (`localStorage`), nunca en el servidor.
+- Se manda como header (`X-Anthropic-Api-Key`) solo en las dos llamadas que realmente usan Claude
+  (subir plano, chat) — ver `_cliente_de_usuario` en `app/api/routes_projects.py`.
+- Nunca se escribe en el archivo del proyecto ni en ningún log del backend.
+
+Conseguir una toma ~2 minutos en https://console.anthropic.com/settings/keys y es "pay-as-you-go"
+(se paga solo lo que se use, sin suscripción fija). Si el backend además tiene su propio
+`ANTHROPIC_API_KEY` configurado (opcional, ver `render.yaml`), esa sirve como respaldo cuando un
+usuario no ha puesto la suya todavía.
 
 ### Almacenamiento persistente
 

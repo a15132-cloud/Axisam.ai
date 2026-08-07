@@ -85,7 +85,12 @@ def ejecutar_turno(
             "en el despliegue del backend (ver render.yaml) para activar el chat."
         )
 
-    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    # max_retries=5 (SDK default is 2): with one shared key serving every
+    # client, a burst of concurrent chats can trip a transient 429/5xx even
+    # on a healthy account - the SDK already retries those with exponential
+    # backoff built in, this just gives it more attempts before the request
+    # actually fails and the client sees the "no disponible" message.
+    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5)
     mensajes: list[dict] = list(proyecto.mensajes)
     mensajes.append(
         {

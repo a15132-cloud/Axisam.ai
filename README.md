@@ -101,6 +101,15 @@ de los dos. Vercel solo puede alojar el primero:
 aparece "no se pudo conectar", aunque el frontend cargue perfectamente.** No es un bug del
 código: son dos despliegues separados y ambos son necesarios.
 
+Por qué el backend no puede vivir también en Vercel: sus funciones serverless no soportan un
+proceso de larga duración con un motor de geometría 3D pesado (`cadquery`/OpenCascade, cientos de
+MB de librerías nativas - muy por encima del límite de tamaño de una función de Vercel) ni guardar
+archivos de forma permanente (los planos y STEP/STL/G-code generados). No es una limitación de
+configuración que se pueda ajustar - es el mismo motivo por el que ningún producto de IA serio
+corre su backend completo solo en funciones serverless. **Y esto es completamente invisible para
+tus clientes**: ellos solo entran a tu link de Vercel y usan la app normal - nunca ven, ni les
+importa, que el trabajo pesado ocurre en un segundo servicio detrás.
+
 ### Paso 1 — Backend en Render (el que probablemente falta)
 
 1. En https://dashboard.render.com → **New +** → **Blueprint** → conecta este repositorio de
@@ -164,6 +173,26 @@ incluido el que usan Perplexity/Grok por detrás), pero sí puedes evitar sorpre
 3. Una conversación típica de Axiscam (unos mensajes + extraer un plano) cuesta centavos de dólar,
    no dólares — para calibrar cuánto poner de límite mensual según cuántos proyectos esperas
    procesar.
+
+### Muchos clientes usando Axiscam al mismo tiempo
+
+Con una sola key compartida entre todos tus clientes (arriba), la pregunta real es si esa key
+aguanta que varios estén chateando a la vez sin que ninguno vea un error - esto está resuelto en
+dos niveles:
+
+1. **Reintentos automáticos.** Cada llamada a Claude (`app/agent/orchestrator.py`,
+   `app/vision/extractor.py`) reintenta hasta 5 veces con backoff exponencial si la cuenta recibe
+   un `429` (límite momentáneo) o un error transitorio del lado de Anthropic - un pico de varios
+   clientes escribiendo al mismo tiempo se absorbe solo, sin que nadie vea nada raro.
+2. **Los límites de tu cuenta de Anthropic suben solos con el uso.** Anthropic asigna un límite de
+   peticiones/minuto según el historial de gasto de la cuenta (tiers) - entre más uso real y pago
+   acumules, más alto sube automáticamente, sin que tengas que hacer nada. Si en algún momento
+   tienes muchos clientes simultáneos y sigues viendo el mensaje de "límite de uso alcanzado" con
+   frecuencia, en https://console.anthropic.com puedes pedir directamente un aumento de límite
+   para tu cuenta - es un trámite normal, no un tope fijo.
+
+Este es el mismo patrón que usa cualquier producto de IA con muchos usuarios detrás de una sola
+cuenta (Perplexity, Notion AI, etc.) - no es una limitación particular de Axiscam.
 
 ### Almacenamiento persistente
 

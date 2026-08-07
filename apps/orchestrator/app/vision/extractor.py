@@ -112,7 +112,9 @@ def extraer_pieza_desde_plano(
         }
     )
 
-    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key)
+    # Same reasoning as app/agent/orchestrator.py::ejecutar_turno - more
+    # retry headroom for a shared key under concurrent load from many clients.
+    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5)
     tool = {
         "name": TOOL_NAME,
         "description": "Registra en formato estructurado la pieza extraida del plano de ingenieria.",

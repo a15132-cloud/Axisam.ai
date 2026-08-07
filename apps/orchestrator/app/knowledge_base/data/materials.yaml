@@ -1,0 +1,171 @@
+# Base de conocimiento de materiales.
+#
+# SEED DATA: valores de referencia tomados de manuales generales de
+# maquinado (Machinery's Handbook / catalogos de herramienta genericos).
+# DEBEN ser validados y ajustados por el maquinista del taller antes de
+# usarse en produccion real. Cada material tiene un campo `validado_por`
+# que debe llenarse una vez revisado.
+#
+# maquinabilidad: indice relativo (acero 1212 = 100 referencia AISI)
+# vc_recomendada_m_min: velocidad de corte recomendada en fresado con
+#   fresa de carburo recubierta, como punto de partida conservador.
+
+materiales:
+  aluminio_6061:
+    nombre_display: "Aluminio 6061-T6"
+    familia: aluminio
+    maquinabilidad: 180
+    dureza_hb: 95
+    vc_recomendada_m_min: 300
+    avance_por_diente_mm:
+      broca: 0.10
+      fresa_carburo: 0.08
+      fresa_hss: 0.05
+    refrigerante: recomendado
+    validado_por: null
+
+  aluminio_7075:
+    nombre_display: "Aluminio 7075-T6"
+    familia: aluminio
+    maquinabilidad: 160
+    dureza_hb: 150
+    vc_recomendada_m_min: 250
+    avance_por_diente_mm:
+      broca: 0.09
+      fresa_carburo: 0.07
+      fresa_hss: 0.045
+    refrigerante: recomendado
+    validado_por: null
+
+  acero_1018:
+    nombre_display: "Acero 1018 (bajo carbono)"
+    familia: acero_bajo_carbono
+    maquinabilidad: 78
+    dureza_hb: 126
+    vc_recomendada_m_min: 110
+    avance_por_diente_mm:
+      broca: 0.08
+      fresa_carburo: 0.06
+      fresa_hss: 0.035
+    refrigerante: requerido
+    validado_por: null
+
+  acero_1045:
+    nombre_display: "Acero 1045 (medio carbono)"
+    familia: acero_medio_carbono
+    maquinabilidad: 65
+    dureza_hb: 170
+    vc_recomendada_m_min: 90
+    avance_por_diente_mm:
+      broca: 0.07
+      fresa_carburo: 0.05
+      fresa_hss: 0.03
+    refrigerante: requerido
+    validado_por: null
+
+  acero_4140:
+    nombre_display: "Acero 4140 (aleado, templado y revenido)"
+    familia: acero_aleado
+    maquinabilidad: 55
+    dureza_hb: 285
+    vc_recomendada_m_min: 70
+    avance_por_diente_mm:
+      broca: 0.06
+      fresa_carburo: 0.045
+      fresa_hss: 0.025
+    refrigerante: requerido
+    validado_por: null
+
+  acero_inoxidable_304:
+    nombre_display: "Acero inoxidable 304"
+    familia: acero_inoxidable
+    maquinabilidad: 45
+    dureza_hb: 150
+    vc_recomendada_m_min: 60
+    avance_por_diente_mm:
+      broca: 0.06
+      fresa_carburo: 0.04
+      fresa_hss: 0.02
+    refrigerante: requerido
+    notas: "Endurece por deformacion - evitar pasadas de acabado con avance muy bajo"
+    validado_por: null
+
+  acero_inoxidable_316:
+    nombre_display: "Acero inoxidable 316"
+    familia: acero_inoxidable
+    maquinabilidad: 40
+    dureza_hb: 160
+    vc_recomendada_m_min: 55
+    avance_por_diente_mm:
+      broca: 0.055
+      fresa_carburo: 0.038
+      fresa_hss: 0.018
+    refrigerante: requerido
+    validado_por: null
+
+  laton_360:
+    nombre_display: "Laton 360 (free-cutting)"
+    familia: laton
+    maquinabilidad: 100
+    dureza_hb: 78
+    vc_recomendada_m_min: 250
+    avance_por_diente_mm:
+      broca: 0.12
+      fresa_carburo: 0.09
+      fresa_hss: 0.06
+    refrigerante: opcional
+    validado_por: null
+
+  bronce_swg:
+    nombre_display: "Bronce SAE 660"
+    familia: bronce
+    maquinabilidad: 80
+    dureza_hb: 70
+    vc_recomendada_m_min: 150
+    avance_por_diente_mm:
+      broca: 0.10
+      fresa_carburo: 0.08
+      fresa_hss: 0.05
+    refrigerante: opcional
+    validado_por: null
+
+  delrin_pom:
+    nombre_display: "Delrin / POM (acetal)"
+    familia: plastico
+    maquinabilidad: 200
+    dureza_hb: null
+    vc_recomendada_m_min: 350
+    avance_por_diente_mm:
+      broca: 0.12
+      fresa_carburo: 0.10
+      fresa_hss: 0.08
+    refrigerante: no_recomendado
+    notas: "Evitar acumulacion de calor - preferir aire comprimido a refrigerante liquido"
+    validado_por: null
+
+  nylon:
+    nombre_display: "Nylon (PA6/PA66)"
+    familia: plastico
+    maquinabilidad: 180
+    dureza_hb: null
+    vc_recomendada_m_min: 300
+    avance_por_diente_mm:
+      broca: 0.12
+      fresa_carburo: 0.10
+      fresa_hss: 0.08
+    refrigerante: no_recomendado
+    validado_por: null
+
+  titanio_grado5:
+    nombre_display: "Titanio Grado 5 (Ti-6Al-4V)"
+    familia: titanio
+    maquinabilidad: 22
+    dureza_hb: 334
+    vc_recomendada_m_min: 45
+    avance_por_diente_mm:
+      broca: 0.04
+      fresa_carburo: 0.03
+      fresa_hss: 0.012
+    refrigerante: requerido
+    notas: "Baja conductividad termica, alto desgaste de herramienta - vc conservadora"
+    validado_por: null

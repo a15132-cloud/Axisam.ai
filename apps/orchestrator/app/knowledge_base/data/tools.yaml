@@ -1,0 +1,87 @@
+# Catalogo de herramientas de corte disponibles para seleccion automatica.
+# SEED DATA - ajustar a las herramientas reales del taller (marca, numero de
+# parte, inventario). El agente selecciona por tipo+diametro mas cercano
+# disponible; si no hay coincidencia exacta reporta advertencia.
+
+brocas:
+  - diametro_mm: 3.0
+  - diametro_mm: 4.0
+  - diametro_mm: 5.0
+  - diametro_mm: 6.0
+  - diametro_mm: 6.5
+  - diametro_mm: 8.0
+  - diametro_mm: 8.5
+  - diametro_mm: 10.0
+  - diametro_mm: 10.2
+  - diametro_mm: 12.0
+  - diametro_mm: 12.5
+  - diametro_mm: 16.0
+  - diametro_mm: 20.0
+
+fresas_planas_carburo:
+  - diametro_mm: 3.0
+    flautas: 2
+  - diametro_mm: 4.0
+    flautas: 3
+  - diametro_mm: 6.0
+    flautas: 3
+  - diametro_mm: 8.0
+    flautas: 4
+  - diametro_mm: 10.0
+    flautas: 4
+  - diametro_mm: 12.0
+    flautas: 4
+  - diametro_mm: 16.0
+    flautas: 4
+  - diametro_mm: 20.0
+    flautas: 4
+  - diametro_mm: 25.0
+    flautas: 4
+
+fresas_bola_carburo:
+  - diametro_mm: 3.0
+    flautas: 2
+  - diametro_mm: 6.0
+    flautas: 2
+  - diametro_mm: 8.0
+    flautas: 2
+  - diametro_mm: 10.0
+    flautas: 2
+  - diametro_mm: 12.0
+    flautas: 2
+
+fresas_chaflan:
+  - diametro_mm: 6.0
+    angulo_grados: 45
+  - diametro_mm: 10.0
+    angulo_grados: 45
+  - diametro_mm: 12.0
+    angulo_grados: 45
+  - diametro_mm: 20.0
+    angulo_grados: 90
+
+machuelos:
+  - rosca: "M3x0.5"
+    diametro_pretaladro_mm: 2.5
+  - rosca: "M4x0.7"
+    diametro_pretaladro_mm: 3.3
+  - rosca: "M5x0.8"
+    diametro_pretaladro_mm: 4.2
+  - rosca: "M6x1.0"
+    diametro_pretaladro_mm: 5.0
+  - rosca: "M8x1.25"
+    diametro_pretaladro_mm: 6.8
+  - rosca: "M10x1.5"
+    diametro_pretaladro_mm: 8.5
+  - rosca: "M12x1.75"
+    diametro_pretaladro_mm: 10.2
+
+herramientas_torno:
+  - tipo: cilindrado_exterior
+    codigo_insert: CNMG120408
+  - tipo: refrentado
+    codigo_insert: CNMG120404
+  - tipo: ranurado
+    ancho_mm: 3.0
+  - tipo: roscado_externo
+    codigo_insert: "16ER"

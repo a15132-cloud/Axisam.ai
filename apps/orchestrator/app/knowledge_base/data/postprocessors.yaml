@@ -1,0 +1,71 @@
+# Postprocesadores soportados para exportar codigo G. El objetivo es que
+# el mismo plan de operaciones (Capa 4/5) se pueda emitir en el dialecto
+# de distintos controles con solo cambiar el postprocesador activo.
+#
+# Este catalogo describe el DIALECTO de salida (encabezados, ciclos fijos,
+# formato de numero, fin de programa). No reemplaza al postprocesador real
+# de Mastercam (.PST) que se debe usar cuando la Capa 4 se conecte al
+# servidor real - sirve para la salida de codigo G simulada de esta fase.
+
+default: haas_vf_generico
+
+postprocesadores:
+  haas_vf_generico:
+    nombre_display: "Haas VF Series (Fanuc-compatible)"
+    controlador: haas
+    extension_archivo: ".nc"
+    numero_programa_prefijo: "O"
+    unidades_default: mm
+    comando_unidades_mm: "G21"
+    comando_unidades_pulg: "G20"
+    ciclo_taladrado_simple: "G81"
+    ciclo_taladrado_profundo: "G83"
+    ciclo_machuelo_rigido: "G84"
+    plano_seguridad_mm: 25.0
+    cambio_herramienta: "T{tool} M6"
+    inicio_husillo: "M3 S{rpm}"
+    refrigerante_on: "M8"
+    refrigerante_off: "M9"
+    fin_programa: "M30"
+    comentario_apertura: "("
+    comentario_cierre: ")"
+
+  fanuc_generico:
+    nombre_display: "Fanuc generico (centro de maquinado vertical)"
+    controlador: fanuc
+    extension_archivo: ".nc"
+    numero_programa_prefijo: "O"
+    unidades_default: mm
+    comando_unidades_mm: "G21"
+    comando_unidades_pulg: "G20"
+    ciclo_taladrado_simple: "G81"
+    ciclo_taladrado_profundo: "G83"
+    ciclo_machuelo_rigido: "G84"
+    plano_seguridad_mm: 25.0
+    cambio_herramienta: "T{tool} M6"
+    inicio_husillo: "M3 S{rpm}"
+    refrigerante_on: "M8"
+    refrigerante_off: "M9"
+    fin_programa: "M30"
+    comentario_apertura: "("
+    comentario_cierre: ")"
+
+  siemens_840d:
+    nombre_display: "Siemens Sinumerik 840D"
+    controlador: siemens
+    extension_archivo: ".mpf"
+    numero_programa_prefijo: ""
+    unidades_default: mm
+    comando_unidades_mm: "G71"
+    comando_unidades_pulg: "G70"
+    ciclo_taladrado_simple: "CYCLE81"
+    ciclo_taladrado_profundo: "CYCLE83"
+    ciclo_machuelo_rigido: "CYCLE84"
+    plano_seguridad_mm: 25.0
+    cambio_herramienta: "T={tool} M6"
+    inicio_husillo: "M3 S={rpm}"
+    refrigerante_on: "M8"
+    refrigerante_off: "M9"
+    fin_programa: "M30"
+    comentario_apertura: ";"
+    comentario_cierre: ""

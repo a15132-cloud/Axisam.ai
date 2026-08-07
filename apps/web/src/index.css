@@ -5,25 +5,26 @@
   --font-display: "Oswald", "IBM Plex Sans", ui-sans-serif, sans-serif;
   --font-mono: "IBM Plex Mono", ui-monospace, "SFMono-Regular", Menlo, monospace;
 
-  /* Primario: negro. Secundario: naranja. Terciario: blanco. */
-  --color-bg: #0a0a0a;
-  --color-surface: #131313;
-  --color-surface-2: #1a1a1a;
-  --color-surface-3: #232323;
-  --color-border: #2e2e2e;
-  --color-border-soft: #1f1f1f;
+  /* Primario: gris oscuro cálido. Secundario: naranja suave (terracota, no
+     naranja de seguridad neón). Terciario: blanco cálido. */
+  --color-bg: #262624;
+  --color-surface: #2d2c2a;
+  --color-surface-2: #343330;
+  --color-surface-3: #3d3b38;
+  --color-border: #47443f;
+  --color-border-soft: #322f2b;
 
-  --color-accent: #ff6a00;
-  --color-accent-2: #ff8c3d;
-  --color-accent-soft: #3d1f0a;
+  --color-accent: #d97757;
+  --color-accent-2: #e2926f;
+  --color-accent-soft: #3a2318;
 
   --color-ok: #34d399;
   --color-warn: #eab308;
   --color-danger: #ef4444;
 
-  --color-text: #f2f2f0;
-  --color-text-muted: #a3a19c;
-  --color-text-faint: #6b6963;
+  --color-text: #f5f4f1;
+  --color-text-muted: #a8a6a0;
+  --color-text-faint: #726f69;
 }
 
 @layer base {
@@ -72,7 +73,7 @@
   }
 
   .text-gradient-brand {
-    background: linear-gradient(120deg, #ff6a00 0%, #ffb066 45%, #ffffff 100%);
+    background: linear-gradient(120deg, #d97757 0%, #e8a988 45%, #ffffff 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
@@ -101,10 +102,10 @@
 
 @keyframes pulse-ring {
   0% {
-    box-shadow: 0 0 0 0 rgba(255, 106, 0, 0.5);
+    box-shadow: 0 0 0 0 rgba(217, 119, 87, 0.5);
   }
   100% {
-    box-shadow: 0 0 0 12px rgba(255, 106, 0, 0);
+    box-shadow: 0 0 0 12px rgba(217, 119, 87, 0);
   }
 }
 

@@ -28,8 +28,25 @@ export class ApiError extends Error {
 
 function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
   return promise
-    .then((res) => res.data)
+    .then((res) => {
+      // A misconfigured VITE_API_BASE_URL (or a rewrite that catches
+      // unmatched paths - see vercel.json) can make an "/api/..." request
+      // land on a static host that answers 200 with index.html instead of
+      // a real 404. Axios then hands back the raw HTML string as `data`
+      // because it isn't valid JSON. Treating that string as a Proyecto
+      // silently corrupts app state instead of failing - which showed up
+      // as "Cannot read properties of undefined (reading 'find')" deep in
+      // a component with no idea anything was wrong upstream. Fail loudly
+      // here instead, at the one place that actually knows the shape is off.
+      if (typeof res.data === "string") {
+        throw new ApiError(
+          "El servidor respondió con HTML en vez de datos - revisa que VITE_API_BASE_URL apunte al backend real."
+        );
+      }
+      return res.data;
+    })
     .catch((err) => {
+      if (err instanceof ApiError) throw err;
       const detail = err?.response?.data?.detail;
       throw new ApiError(typeof detail === "string" ? detail : err.message, err?.response?.status);
     });

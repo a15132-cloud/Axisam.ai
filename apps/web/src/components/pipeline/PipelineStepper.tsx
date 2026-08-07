@@ -31,7 +31,7 @@ export function PipelineStepper({ etapa }: { etapa: Etapa }) {
               <motion.div
                 animate={
                   status === "active"
-                    ? { boxShadow: ["0 0 0 0 rgba(255,106,0,0.5)", "0 0 0 8px rgba(255,106,0,0)"] }
+                    ? { boxShadow: ["0 0 0 0 rgba(217,119,87,0.5)", "0 0 0 8px rgba(217,119,87,0)"] }
                     : {}
                 }
                 transition={status === "active" ? { duration: 1.6, repeat: Infinity, ease: "easeOut" } : {}}

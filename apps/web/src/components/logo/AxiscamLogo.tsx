@@ -45,8 +45,8 @@ export function AxiscamLogo({ size = 40, animated = true, className }: AxiscamLo
     >
       <defs>
         <linearGradient id={gradId} x1="0%" y1="0%" x2="100%" y2="100%">
-          <stop offset="0%" stopColor="#ff6a00" />
-          <stop offset="55%" stopColor="#ff9d52" />
+          <stop offset="0%" stopColor="#d97757" />
+          <stop offset="55%" stopColor="#e8a988" />
           <stop offset="100%" stopColor="#ffffff" />
         </linearGradient>
         <linearGradient id={shineId} x1="0%" y1="0%" x2="100%" y2="0%">
@@ -66,7 +66,7 @@ export function AxiscamLogo({ size = 40, animated = true, className }: AxiscamLo
       <g filter={animated ? `url(#${glowId})` : undefined}>
         <motion.path
           d="M44,6 L50,6 L18,94 L10,94 Z"
-          fill="#c94800"
+          fill="#a85a3e"
           custom={0}
           variants={animated ? legVariants : undefined}
           initial={animated ? "hidden" : undefined}
@@ -82,7 +82,7 @@ export function AxiscamLogo({ size = 40, animated = true, className }: AxiscamLo
         />
         <motion.path
           d="M42,64 L58,64 L54,72 L46,72 Z"
-          fill="#ff6a00"
+          fill="#d97757"
           initial={animated ? { opacity: 0, y: -4 } : undefined}
           animate={animated ? { opacity: 1, y: 0 } : undefined}
           transition={{ delay: 0.55, duration: 0.4, ease: "easeOut" }}

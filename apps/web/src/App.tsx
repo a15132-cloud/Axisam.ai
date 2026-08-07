@@ -24,6 +24,7 @@ export default function App() {
   const [proyecto, setProyecto] = useState<Proyecto | null>(null);
   const [mensajesLibres, setMensajesLibres] = useState<ChatEntry[]>([]);
   const [anthropicConfigurado, setAnthropicConfigurado] = useState<boolean | null>(null);
+  const [backendAlcanzable, setBackendAlcanzable] = useState<boolean | null>(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [vistaMobile, setVistaMobile] = useState<VistaMobile>("chat");
@@ -37,8 +38,14 @@ export default function App() {
   useEffect(() => {
     api
       .health()
-      .then((h) => setAnthropicConfigurado(h.anthropic_configurado))
-      .catch(() => setAnthropicConfigurado(false));
+      .then((h) => {
+        setAnthropicConfigurado(h.anthropic_configurado);
+        setBackendAlcanzable(true);
+      })
+      .catch(() => {
+        setAnthropicConfigurado(false);
+        setBackendAlcanzable(false);
+      });
 
     api
       .listarProyectos()
@@ -199,6 +206,13 @@ export default function App() {
           onCambiarVistaMobile={setVistaMobile}
           mostrarSwitchMobile={!!proyecto}
         />
+
+        {backendAlcanzable === false && (
+          <div className="border-b border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-2 text-center text-xs text-[var(--color-danger)]">
+            No se pudo conectar con el backend. La interfaz está cargando, pero nada es real todavía: revisa que{" "}
+            <code className="font-mono">VITE_API_BASE_URL</code> apunte al backend desplegado.
+          </div>
+        )}
 
         <div className="flex min-h-0 flex-1">
           <div

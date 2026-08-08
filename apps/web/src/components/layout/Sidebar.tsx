@@ -151,7 +151,7 @@ function FilaProyecto({
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ETAPA_DOT[proyecto.etapa]}`} />
         <span className="min-w-0 flex-1 truncate pr-12">{proyecto.nombre}</span>
       </button>
-      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
+      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
         <button
           onClick={(e) => {
             e.stopPropagation();

@@ -16,7 +16,11 @@ if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
   );
 }
 
-const client = axios.create({ baseURL });
+// Render (plan gratis) puede tardar hasta ~50s en despertar tras estar
+// inactivo. Sin un timeout, una peticion en un celular con red inestable
+// puede quedarse colgada indefinidamente sin dar ningun error - el boton
+// que la disparo se ve "no cargado" para siempre en vez de fallar y avisar.
+const client = axios.create({ baseURL, timeout: 70000 });
 
 export class ApiError extends Error {
   status?: number;
@@ -47,6 +51,14 @@ function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
     })
     .catch((err) => {
       if (err instanceof ApiError) throw err;
+      if (err?.code === "ECONNABORTED" || /timeout/i.test(err?.message ?? "")) {
+        throw new ApiError(
+          "El servidor está tardando más de lo normal en responder (puede estar despertando tras estar inactivo). Intenta de nuevo en unos segundos."
+        );
+      }
+      if (err?.message === "Network Error") {
+        throw new ApiError("No se pudo conectar con el servidor. Revisa tu conexión a internet e intenta de nuevo.");
+      }
       const detail = err?.response?.data?.detail;
       throw new ApiError(typeof detail === "string" ? detail : err.message, err?.response?.status);
     });

@@ -54,7 +54,7 @@ function EstadoBridge({ bridgeWindows }: { bridgeWindows: BridgeWindowsStatus | 
   );
 }
 
-function BotonNuevoProyecto({ creando, onClick }: { creando: boolean; onClick: () => void }) {
+export function BotonNuevoProyecto({ creando, onClick }: { creando: boolean; onClick: () => void }) {
   const [tardando, setTardando] = useState(false);
 
   useEffect(() => {

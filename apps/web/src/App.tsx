@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Sidebar } from "./components/layout/Sidebar";
+import { Sidebar, BotonNuevoProyecto } from "./components/layout/Sidebar";
 import { Header, type VistaMobile } from "./components/layout/Header";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { RightPanel } from "./components/pipeline/RightPanel";
@@ -27,6 +27,7 @@ export default function App() {
   const [backendAlcanzable, setBackendAlcanzable] = useState<boolean | null>(null);
   const [bridgeWindows, setBridgeWindows] = useState<BridgeWindowsStatus | null>(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
+  const [errorListaProyectos, setErrorListaProyectos] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [vistaMobile, setVistaMobile] = useState<VistaMobile>("chat");
 
@@ -49,15 +50,20 @@ export default function App() {
         setBackendAlcanzable(false);
       });
 
-    api
+    cargarProyectos();
+  }, []);
+
+  function cargarProyectos() {
+    setErrorListaProyectos(false);
+    return api
       .listarProyectos()
       .then((lista) => {
         setProyectos(lista);
-        if (lista.length > 0) setProyecto(lista[0]);
+        if (lista.length > 0) setProyecto((actual) => actual ?? lista[0]);
       })
-      .catch(() => {})
+      .catch(() => setErrorListaProyectos(true))
       .finally(() => setCargandoInicial(false));
-  }, []);
+  }
 
   function actualizarListaProyecto(actualizado: Proyecto) {
     setProyectos((prev) => {
@@ -239,7 +245,12 @@ export default function App() {
             } lg:flex`}
           >
             {cargandoInicial ? null : !proyecto ? (
-              <EmptyState onNuevoProyecto={crearProyecto} creando={creando} />
+              <EmptyState
+                onNuevoProyecto={crearProyecto}
+                creando={creando}
+                errorAlCargar={errorListaProyectos}
+                onReintentar={cargarProyectos}
+              />
             ) : (
               <ChatPanel
                 entries={entries}
@@ -271,17 +282,40 @@ export default function App() {
   );
 }
 
-function EmptyState({ onNuevoProyecto, creando }: { onNuevoProyecto: () => void; creando: boolean }) {
+function EmptyState({
+  onNuevoProyecto,
+  creando,
+  errorAlCargar,
+  onReintentar,
+}: {
+  onNuevoProyecto: () => void;
+  creando: boolean;
+  errorAlCargar: boolean;
+  onReintentar: () => void;
+}) {
+  if (errorAlCargar) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+        <p className="text-sm text-[var(--color-danger)]">
+          No se pudo cargar tu lista de proyectos. Puede que ya tengas proyectos guardados - no se
+          perdieron, solo no se pudieron traer ahora.
+        </p>
+        <button
+          onClick={onReintentar}
+          className="rounded-lg bg-[var(--color-surface-3)] px-4 py-2 text-sm font-semibold text-[var(--color-text)] hover:bg-[var(--color-surface-2)]"
+        >
+          Reintentar
+        </button>
+      </div>
+    );
+  }
+
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
       <p className="text-sm text-[var(--color-text-muted)]">No tienes proyectos todavía.</p>
-      <button
-        onClick={onNuevoProyecto}
-        disabled={creando}
-        className="rounded-lg bg-[var(--color-accent)] px-4 py-2 text-sm font-semibold text-black hover:bg-[var(--color-accent-2)] disabled:opacity-60"
-      >
-        Crear tu primer proyecto
-      </button>
+      <div className="w-full max-w-xs">
+        <BotonNuevoProyecto creando={creando} onClick={onNuevoProyecto} />
+      </div>
     </div>
   );
 }

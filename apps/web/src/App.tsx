@@ -107,6 +107,16 @@ export default function App() {
     }
   }
 
+  async function renombrarProyecto(id: string, nombre: string) {
+    try {
+      const actualizado = await api.renombrarProyecto(id, nombre);
+      actualizarListaProyecto(actualizado);
+      if (proyecto?.id === id) setProyecto(actualizado);
+    } catch (err) {
+      window.alert(err instanceof ApiError ? err.message : "No se pudo renombrar el proyecto.");
+    }
+  }
+
   async function subirArchivo(archivo: File, instrucciones: string) {
     if (!proyecto) return;
     setSubiendo(true);
@@ -193,6 +203,7 @@ export default function App() {
         onSeleccionar={seleccionarProyecto}
         onNuevoProyecto={crearProyecto}
         onEliminar={eliminarProyecto}
+        onRenombrar={renombrarProyecto}
         creando={creando}
         abierto={menuAbierto}
         onCerrar={() => setMenuAbierto(false)}

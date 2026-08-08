@@ -13,7 +13,7 @@ import logging
 
 import anthropic
 from fastapi import APIRouter, File, Form, HTTPException, UploadFile
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.agent import approval
 from app.agent.orchestrator import ejecutar_turno
@@ -81,6 +81,10 @@ class GenerarTrayectoriasBody(BaseModel):
     postprocesador: str | None = None
 
 
+class RenombrarProyectoBody(BaseModel):
+    nombre: str = Field(min_length=1, max_length=200)
+
+
 def _obtener_o_404(project_id: str) -> Proyecto:
     try:
         return storage.cargar_proyecto(project_id)
@@ -111,6 +115,17 @@ def eliminar_proyecto(project_id: str) -> dict:
     _obtener_o_404(project_id)
     storage.eliminar_proyecto(project_id)
     return {"eliminado": True}
+
+
+@router.put("/{project_id}/nombre")
+def renombrar_proyecto(project_id: str, body: RenombrarProyectoBody) -> Proyecto:
+    proyecto = _obtener_o_404(project_id)
+    nombre_limpio = body.nombre.strip()
+    if not nombre_limpio:
+        raise HTTPException(status_code=422, detail="El nombre no puede estar vacío.")
+    proyecto.nombre = nombre_limpio
+    storage.guardar_proyecto(proyecto)
+    return proyecto
 
 
 @router.post("/{project_id}/plano")

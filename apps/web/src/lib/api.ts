@@ -66,6 +66,7 @@ export const api = {
   listarProyectos: () => unwrap<Proyecto[]>(client.get("/projects")),
   obtenerProyecto: (id: string) => unwrap<Proyecto>(client.get(`/projects/${id}`)),
   eliminarProyecto: (id: string) => unwrap<{ eliminado: boolean }>(client.delete(`/projects/${id}`)),
+  renombrarProyecto: (id: string, nombre: string) => unwrap<Proyecto>(client.put(`/projects/${id}/nombre`, { nombre })),
 
   subirPlano: (id: string, archivo: File, instrucciones?: string) => {
     const form = new FormData();

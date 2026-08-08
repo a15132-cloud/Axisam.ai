@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, MessageSquare, Trash2, X, Cable } from "lucide-react";
+import { Plus, MessageSquare, Trash2, X, Cable, Pencil, Check, Loader2 } from "lucide-react";
 import { AxiscamLogo } from "../logo/AxiscamLogo";
 import type { BridgeWindowsStatus, Proyecto } from "../../lib/types";
 
@@ -23,6 +24,7 @@ interface SidebarProps {
   onSeleccionar: (id: string) => void;
   onNuevoProyecto: () => void;
   onEliminar: (id: string) => void;
+  onRenombrar: (id: string, nombre: string) => void | Promise<void>;
   creando: boolean;
   abierto: boolean;
   onCerrar: () => void;
@@ -52,7 +54,130 @@ function EstadoBridge({ bridgeWindows }: { bridgeWindows: BridgeWindowsStatus | 
   );
 }
 
-export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoProyecto, onEliminar, creando, abierto, onCerrar, bridgeWindows }: SidebarProps) {
+function BotonNuevoProyecto({ creando, onClick }: { creando: boolean; onClick: () => void }) {
+  const [tardando, setTardando] = useState(false);
+
+  useEffect(() => {
+    if (!creando) {
+      setTardando(false);
+      return;
+    }
+    const t = setTimeout(() => setTardando(true), 4000);
+    return () => clearTimeout(t);
+  }, [creando]);
+
+  return (
+    <motion.button
+      whileTap={{ scale: 0.97 }}
+      onClick={onClick}
+      disabled={creando}
+      className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-3 py-3 text-sm font-semibold text-black transition-colors hover:bg-[var(--color-accent-2)] disabled:opacity-80 lg:py-2.5"
+      title={tardando ? "El servidor estaba dormido (plan gratis de Render) y está despertando - puede tardar hasta 50s" : undefined}
+    >
+      {creando ? (
+        <>
+          <Loader2 className="h-4 w-4 animate-spin" />
+          {tardando ? "Despertando el servidor…" : "Creando…"}
+        </>
+      ) : (
+        <>
+          <Plus className="h-4 w-4" /> Nuevo proyecto
+        </>
+      )}
+    </motion.button>
+  );
+}
+
+function FilaProyecto({
+  proyecto,
+  activo,
+  onSeleccionar,
+  onEliminar,
+  onRenombrar,
+}: {
+  proyecto: Proyecto;
+  activo: boolean;
+  onSeleccionar: () => void;
+  onEliminar: () => void;
+  onRenombrar: (nombre: string) => void | Promise<void>;
+}) {
+  const [editando, setEditando] = useState(false);
+  const [valor, setValor] = useState(proyecto.nombre);
+  const inputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    if (editando) {
+      setValor(proyecto.nombre);
+      requestAnimationFrame(() => inputRef.current?.select());
+    }
+  }, [editando, proyecto.nombre]);
+
+  function guardar() {
+    setEditando(false);
+    const limpio = valor.trim();
+    if (limpio && limpio !== proyecto.nombre) onRenombrar(limpio);
+  }
+
+  if (editando) {
+    return (
+      <div className="flex items-center gap-1 rounded-lg bg-[var(--color-surface-3)] px-3 py-2.5">
+        <input
+          ref={inputRef}
+          value={valor}
+          onChange={(e) => setValor(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") guardar();
+            if (e.key === "Escape") setEditando(false);
+          }}
+          onBlur={guardar}
+          maxLength={200}
+          className="min-w-0 flex-1 bg-transparent text-sm text-[var(--color-text)] outline-none"
+        />
+        <button onMouseDown={(e) => e.preventDefault()} onClick={guardar} className="shrink-0 rounded p-1 text-[var(--color-ok)] hover:bg-[var(--color-surface-2)]" title="Guardar nombre">
+          <Check className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="group relative">
+      <button
+        onClick={onSeleccionar}
+        className={`flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm transition-colors lg:py-2.5 ${
+          activo ? "bg-[var(--color-surface-3)] text-[var(--color-text)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)]"
+        }`}
+      >
+        <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ETAPA_DOT[proyecto.etapa]}`} />
+        <span className="min-w-0 flex-1 truncate pr-12">{proyecto.nombre}</span>
+      </button>
+      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100">
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            setEditando(true);
+          }}
+          className="rounded-md p-1.5 text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
+          title="Renombrar proyecto"
+        >
+          <Pencil className="h-3.5 w-3.5" />
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onEliminar();
+          }}
+          className="rounded-md p-1.5 text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+          title="Eliminar proyecto"
+        >
+          <Trash2 className="h-3.5 w-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoProyecto, onEliminar, onRenombrar, creando, abierto, onCerrar, bridgeWindows }: SidebarProps) {
   return (
     <>
       {/* Backdrop - mobile only, closes the drawer on tap outside */}
@@ -84,14 +209,7 @@ export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoPro
         </div>
 
         <div className="px-3">
-          <motion.button
-            whileTap={{ scale: 0.97 }}
-            onClick={onNuevoProyecto}
-            disabled={creando}
-            className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-3 py-3 text-sm font-semibold text-black transition-colors hover:bg-[var(--color-accent-2)] disabled:opacity-60 lg:py-2.5"
-          >
-            <Plus className="h-4 w-4" /> Nuevo proyecto
-          </motion.button>
+          <BotonNuevoProyecto creando={creando} onClick={onNuevoProyecto} />
         </div>
 
         <div className="mt-4 flex items-center gap-2 px-4 text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
@@ -101,27 +219,14 @@ export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoPro
         <div className="mt-2 flex-1 space-y-0.5 overflow-y-auto scrollbar-thin px-2 pb-4">
           {proyectos.length === 0 && <p className="px-2 py-4 text-xs text-[var(--color-text-faint)]">Aún no hay proyectos.</p>}
           {proyectos.map((p) => (
-            <div key={p.id} className="group relative">
-              <button
-                onClick={() => onSeleccionar(p.id)}
-                className={`flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm transition-colors lg:py-2.5 ${
-                  p.id === proyectoActualId ? "bg-[var(--color-surface-3)] text-[var(--color-text)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)]"
-                }`}
-              >
-                <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ETAPA_DOT[p.etapa]}`} />
-                <span className="min-w-0 flex-1 truncate pr-6">{p.nombre}</span>
-              </button>
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onEliminar(p.id);
-                }}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1.5 text-[var(--color-text-faint)] opacity-100 hover:text-[var(--color-danger)] lg:opacity-0 lg:group-hover:opacity-100"
-                title="Eliminar proyecto"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            </div>
+            <FilaProyecto
+              key={p.id}
+              proyecto={p}
+              activo={p.id === proyectoActualId}
+              onSeleccionar={() => onSeleccionar(p.id)}
+              onEliminar={() => onEliminar(p.id)}
+              onRenombrar={(nombre) => onRenombrar(p.id, nombre)}
+            />
           ))}
         </div>
 

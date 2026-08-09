@@ -29,6 +29,11 @@ export interface SimboloGDT {
   aplica_a?: string | null;
 }
 
+export interface SegmentoChaflanCompuesto {
+  profundidad_mm: number;
+  angulo_grados: number;
+}
+
 export interface Feature {
   id?: string | null;
   tipo: TipoFeature;
@@ -46,6 +51,7 @@ export interface Feature {
   tolerancia_mm?: number | null;
   rosca?: string | null;
   gdt: SimboloGDT[];
+  chaflanes_compuestos?: SegmentoChaflanCompuesto[] | null;
 }
 
 export interface Dimensiones {

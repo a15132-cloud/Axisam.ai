@@ -1,10 +1,9 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Pencil, X } from "lucide-react";
+import { Check, HelpCircle, Pencil, X } from "lucide-react";
 import type { Pieza } from "../../lib/types";
 import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
-import { WarningBanner } from "../common/WarningBanner";
 
 interface PiezaCardProps {
   pieza: Pieza;
@@ -24,8 +23,12 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, conf
   const [borrador, setBorrador] = useState(() => JSON.stringify(pieza, null, 2));
   const [errorJson, setErrorJson] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
+  const [preguntasRevisadas, setPreguntasRevisadas] = useState(false);
 
   const d = pieza.dimensiones;
+  const preguntasPendientes = pieza.extraccion.campos_baja_confianza;
+  const tienePreguntas = preguntasPendientes.length > 0;
+  const puedeConfirmar = !tienePreguntas || preguntasRevisadas;
 
   async function guardar() {
     setErrorJson(null);
@@ -110,7 +113,15 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, conf
                       <td className="py-1.5 pr-3">{i + 1}</td>
                       <td className="py-1.5 pr-3 capitalize text-[var(--color-text)]">{f.tipo.replace(/_/g, " ")}</td>
                       <td className="py-1.5 pr-3">
-                        {f.diametro_mm ? `Ø${f.diametro_mm} mm` : f.radio_mm ? `R${f.radio_mm} mm` : f.ancho_mm ? `${f.ancho_mm}×${f.largo_mm} mm` : "—"}
+                        {f.diametro_mm
+                          ? `Ø${f.diametro_mm} mm`
+                          : f.radio_mm
+                            ? `R${f.radio_mm} mm`
+                            : f.ancho_mm && f.largo_mm
+                              ? `${f.ancho_mm}×${f.largo_mm} mm`
+                              : f.ancho_mm
+                                ? `${f.ancho_mm} mm${f.cara ? ` (${f.cara})` : ""}`
+                                : "—"}
                       </td>
                       <td className="py-1.5 pr-3">
                         {f.posiciones?.length
@@ -127,21 +138,59 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, conf
             </div>
           )}
 
-          {pieza.extraccion.campos_baja_confianza.length > 0 && (
-            <div className="mt-3">
-              <WarningBanner
-                title="Campos con baja confianza - revisa antes de confirmar"
-                items={pieza.extraccion.campos_baja_confianza}
-              />
-            </div>
+          {tienePreguntas && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: "auto" }}
+              className="mt-3 overflow-hidden rounded-lg border border-[var(--color-warn)]/30 bg-[var(--color-warn)]/10 px-3 py-2.5"
+            >
+              <div className="flex items-start gap-2">
+                <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-warn)]" />
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs font-semibold text-[var(--color-warn)]">
+                    Axiscam no encontró esto en el plano - antes de continuar, dime qué hacer:
+                  </p>
+                  <ul className="mt-1.5 space-y-1 text-xs text-[var(--color-text-muted)]">
+                    {preguntasPendientes.map((item, i) => (
+                      <li key={i} className="leading-relaxed">
+                        <span className="text-[var(--color-warn)]">·</span> {item}
+                      </li>
+                    ))}
+                  </ul>
+                  {pieza.extraccion.notas && (
+                    <p className="mt-2 rounded-md bg-[var(--color-bg)]/40 px-2 py-1.5 text-xs italic leading-relaxed text-[var(--color-text-muted)]">
+                      {pieza.extraccion.notas}
+                    </p>
+                  )}
+                  {!readOnly && (
+                    <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-xs text-[var(--color-text)]">
+                      <input
+                        type="checkbox"
+                        checked={preguntasRevisadas}
+                        onChange={(e) => setPreguntasRevisadas(e.target.checked)}
+                        className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--color-accent)]"
+                      />
+                      Ya revisé estos puntos - confirmo que quiero continuar así, o los voy a corregir con "Editar información".
+                    </label>
+                  )}
+                </div>
+              </div>
+            </motion.div>
           )}
-          {pieza.extraccion.notas && (
+          {!tienePreguntas && pieza.extraccion.notas && (
             <p className="mt-2 text-xs italic text-[var(--color-text-faint)]">Nota del extractor: {pieza.extraccion.notas}</p>
           )}
 
           {!readOnly && (
             <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.15 }} className="mt-4 flex flex-wrap gap-2">
-              <Button variant="primary" icon={<Check className="h-3.5 w-3.5" />} onClick={onConfirmar} loading={confirming}>
+              <Button
+                variant="primary"
+                icon={<Check className="h-3.5 w-3.5" />}
+                onClick={onConfirmar}
+                loading={confirming}
+                disabled={!puedeConfirmar}
+                title={puedeConfirmar ? undefined : "Marca la casilla de arriba, o edita la información, antes de confirmar"}
+              >
                 Confirmar y continuar
               </Button>
               <Button variant="secondary" icon={<Pencil className="h-3.5 w-3.5" />} onClick={() => setEditando(true)}>

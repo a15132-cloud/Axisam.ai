@@ -331,38 +331,35 @@ def generar_codigo_g(pieza: Pieza, plan: PlanDetallado, numero_programa: int = 1
     advertencias = list(plan.plan.advertencias)
     con_movimiento = 0
     sin_movimiento = 0
+    pendientes: list[str] = []
 
-    lineas: list[str] = []
-    for l in DISCLAIMER.splitlines():
-        lineas.append(_comentario(pp, l))
-    lineas.append(_comentario(pp, f"Pieza: {pieza.pieza} | Material: {pieza.material.nombre} | Cantidad: {pieza.cantidad}"))
-    lineas.append(_comentario(pp, f"Postprocesador: {pp['nombre_display']}"))
-    lineas.append(_comentario(pp, f"Generado: {datetime.now(timezone.utc).isoformat()}"))
-    lineas.append("")
-    lineas.append(f"{pp['numero_programa_prefijo']}{numero_programa}")
-    lineas.append("G90 G54 G17 G40 G49 G80")
-    lineas.append(pp["comando_unidades_mm"] if pieza.unidades == "mm" else pp["comando_unidades_pulg"])
-    lineas.append(f"G0 Z{pp['plano_seguridad_mm']:.3f}")
-    lineas.append("")
-
+    # Operations are built BEFORE the header on purpose: whether any
+    # operation ended up with no real toolpath is only known after running
+    # the loop, and a machinist must never have to scroll past real G-code
+    # to discover that a real cut - one they might expect their part to
+    # have - was silently skipped. See the block appended into the header
+    # below: if pendientes is non-empty, it becomes the very first thing
+    # in the file, before even the postprocessor/date info.
+    lineas_operaciones: list[str] = []
     tool_num = 1
     for feature, op in plan.operaciones_por_feature:
         if feature.tipo in FEATURES_CON_CICLO_TALADRADO:
-            lineas.extend(_bloque_taladrado(pp, feature, op, pieza.dimensiones.espesor_mm, tool_num))
+            lineas_operaciones.extend(_bloque_taladrado(pp, feature, op, pieza.dimensiones.espesor_mm, tool_num))
             con_movimiento += 1
+            hubo_movimiento = True
         elif feature.tipo in FEATURES_CON_CAJERA:
             bloque, hubo_movimiento = _bloque_cajera(pp, feature, op, tool_num)
-            lineas.extend(bloque)
+            lineas_operaciones.extend(bloque)
             con_movimiento += 1 if hubo_movimiento else 0
             sin_movimiento += 0 if hubo_movimiento else 1
         elif feature.tipo == TipoFeature.SALIENTE:
             bloque, hubo_movimiento = _bloque_saliente(pp, feature, op, pieza, tool_num)
-            lineas.extend(bloque)
+            lineas_operaciones.extend(bloque)
             con_movimiento += 1 if hubo_movimiento else 0
             sin_movimiento += 0 if hubo_movimiento else 1
         elif feature.tipo == TipoFeature.ESCALON:
             bloque, hubo_movimiento = _bloque_escalon(pp, feature, op, pieza, tool_num)
-            lineas.extend(bloque)
+            lineas_operaciones.extend(bloque)
             con_movimiento += 1 if hubo_movimiento else 0
             sin_movimiento += 0 if hubo_movimiento else 1
         elif feature.tipo in FEATURES_CON_CONTORNO_PIEZA:
@@ -373,15 +370,38 @@ def generar_codigo_g(pieza: Pieza, plan: PlanDetallado, numero_programa: int = 1
             # own shape, not from how far off the line its center travels.
             offset = op.herramienta.diametro_mm / 2 if feature.tipo == TipoFeature.PERFIL_EXTERIOR else 0.0
             bloque, hubo_movimiento = _bloque_contorno(pp, feature, op, pieza, offset, tool_num)
-            lineas.extend(bloque)
+            lineas_operaciones.extend(bloque)
             con_movimiento += 1 if hubo_movimiento else 0
             sin_movimiento += 0 if hubo_movimiento else 1
         else:
-            lineas.extend(_bloque_pendiente(pp, feature, op))
+            lineas_operaciones.extend(_bloque_pendiente(pp, feature, op))
+            hubo_movimiento = False
             sin_movimiento += 1
-        lineas.append("")
+        if not hubo_movimiento:
+            pendientes.append(f"{feature.tipo.value.upper()} id={feature.id or '?'}")
+        lineas_operaciones.append("")
         tool_num += 1
 
+    lineas: list[str] = []
+    for l in DISCLAIMER.splitlines():
+        lineas.append(_comentario(pp, l))
+    if pendientes:
+        lineas.append(_comentario(pp, "*" * 60))
+        lineas.append(_comentario(pp, f"*** ATENCION: {len(pendientes)} OPERACION(ES) SIN CORTAR EN ESTE ARCHIVO ***"))
+        for p in pendientes:
+            lineas.append(_comentario(pp, f"***   - {p} - buscar esta operacion mas abajo para ver el motivo"))
+        lineas.append(_comentario(pp, "*** ESTAS OPERACIONES NO ESTAN EN EL SOLIDO NI EN ESTE CODIGO - NO ASUMIR QUE SI ***"))
+        lineas.append(_comentario(pp, "*" * 60))
+    lineas.append(_comentario(pp, f"Pieza: {pieza.pieza} | Material: {pieza.material.nombre} | Cantidad: {pieza.cantidad}"))
+    lineas.append(_comentario(pp, f"Postprocesador: {pp['nombre_display']}"))
+    lineas.append(_comentario(pp, f"Generado: {datetime.now(timezone.utc).isoformat()}"))
+    lineas.append("")
+    lineas.append(f"{pp['numero_programa_prefijo']}{numero_programa}")
+    lineas.append("G90 G54 G17 G40 G49 G80")
+    lineas.append(pp["comando_unidades_mm"] if pieza.unidades == "mm" else pp["comando_unidades_pulg"])
+    lineas.append(f"G0 Z{pp['plano_seguridad_mm']:.3f}")
+    lineas.append("")
+    lineas.extend(lineas_operaciones)
     lineas.append(_comentario(pp, "FIN DE PROGRAMA - " + DISCLAIMER.splitlines()[0]))
     lineas.append(pp["fin_programa"])
 

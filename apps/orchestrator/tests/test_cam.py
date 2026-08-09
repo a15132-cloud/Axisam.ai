@@ -233,6 +233,40 @@ def test_operacion_sin_movimiento_no_hace_cambio_de_herramienta_falso():
     assert "M8" not in resultado.contenido
 
 
+def test_encabezado_avisa_de_operaciones_sin_cortar_y_no_confunde_las_reales():
+    """A real client concern this must never fail on: if ANY operation in
+    the file has no real toolpath, that must be impossible to miss - not
+    something buried mid-file a machinist could scroll past. The summary
+    goes at the very top, before even the postprocessor/date comments.
+
+    This also regression-tests a bug caught before it shipped: the drilled
+    barreno comes FIRST in this piece and always has real motion, but it
+    never explicitly set the loop's hubo_movimiento flag - so with the
+    escalon (no motion) processed second, a naive read could have carried
+    the previous iteration's flag over and mislabeled the drilling
+    operation as "sin cortar" too. It must not appear in the summary.
+    """
+    pieza = Pieza(
+        pieza="placa",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="hoyo_real", tipo=TipoFeature.BARRENO, diametro_mm=8, posicion=Posicion2D(x=50, y=30)),
+            Feature(id="relieve_sin_profundidad", tipo=TipoFeature.ESCALON, cara="lateral_frontal", ancho_mm=8, profundidad_mm=None),
+        ],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    primeras_lineas = resultado.contenido.splitlines()[:10]
+    encabezado = "\n".join(primeras_lineas)
+    assert "ATENCION" in encabezado
+    assert "relieve_sin_profundidad" in encabezado
+    assert "hoyo_real" not in encabezado  # the real, fully-machined operation must not show up as pending
+    assert resultado.operaciones_con_movimiento_real == 1
+    assert resultado.operaciones_solo_planeadas == 1
+
+
 def test_ciclo_taladrado_no_se_cancela_entre_barrenos():
     """G0 between repeated positions would cancel the G81/G83 modal cycle
     (same modal group), turning holes 2..N into unmachined rapid moves."""

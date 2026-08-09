@@ -3,9 +3,12 @@ import { Sidebar, BotonNuevoProyecto } from "./components/layout/Sidebar";
 import { Header, type VistaMobile } from "./components/layout/Header";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { RightPanel } from "./components/pipeline/RightPanel";
+import { SimulacionEstandaloneView } from "./components/simulation/SimulacionEstandaloneView";
 import { api, ApiError } from "./lib/api";
 import { derivarEntriesPipeline } from "./lib/deriveEntries";
 import type { BridgeWindowsStatus, ChatEntry, Pieza, Proyecto } from "./lib/types";
+
+type Seccion = "proyectos" | "simulacion";
 
 function uid() {
   return Math.random().toString(36).slice(2);
@@ -30,6 +33,7 @@ export default function App() {
   const [errorListaProyectos, setErrorListaProyectos] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
   const [vistaMobile, setVistaMobile] = useState<VistaMobile>("chat");
+  const [seccion, setSeccion] = useState<Seccion>("proyectos");
 
   const [creando, setCreando] = useState(false);
   const [subiendo, setSubiendo] = useState(false);
@@ -85,6 +89,7 @@ export default function App() {
       setProyecto(nuevo);
       setMensajesLibres([]);
       setVistaMobile("chat");
+      setSeccion("proyectos");
       setMenuAbierto(false);
     } catch (err) {
       window.alert(err instanceof ApiError ? err.message : "No se pudo crear el proyecto.");
@@ -99,7 +104,13 @@ export default function App() {
       setProyecto(p);
       setMensajesLibres([]);
       setVistaMobile("chat");
+      setSeccion("proyectos");
     }
+    setMenuAbierto(false);
+  }
+
+  function cambiarSeccion(s: Seccion) {
+    setSeccion(s);
     setMenuAbierto(false);
   }
 
@@ -214,17 +225,18 @@ export default function App() {
         abierto={menuAbierto}
         onCerrar={() => setMenuAbierto(false)}
         bridgeWindows={bridgeWindows}
+        seccion={seccion}
+        onCambiarSeccion={cambiarSeccion}
       />
 
       <div className="flex min-w-0 flex-1 flex-col">
         <Header
-          nombreProyecto={proyecto?.nombre ?? "Axiscam"}
-          etapa={proyecto?.etapa ?? null}
-          anthropicConfigurado={anthropicConfigurado}
+          nombreProyecto={seccion === "simulacion" ? "Simulación" : (proyecto?.nombre ?? "Axiscam")}
+          etapa={seccion === "proyectos" ? (proyecto?.etapa ?? null) : null}
           onAbrirMenu={() => setMenuAbierto(true)}
           vistaMobile={vistaMobile}
           onCambiarVistaMobile={setVistaMobile}
-          mostrarSwitchMobile={!!proyecto}
+          mostrarSwitchMobile={seccion === "proyectos" && !!proyecto}
         />
 
         {backendAlcanzable === false && (
@@ -238,47 +250,53 @@ export default function App() {
           </div>
         )}
 
-        <div className="flex min-h-0 flex-1">
-          <div
-            className={`min-w-0 flex-1 flex-col border-r border-[var(--color-border)] ${
-              vistaMobile === "chat" ? "flex" : "hidden"
-            } lg:flex`}
-          >
-            {cargandoInicial ? null : !proyecto ? (
-              <EmptyState
-                onNuevoProyecto={crearProyecto}
-                creando={creando}
-                errorAlCargar={errorListaProyectos}
-                onReintentar={cargarProyectos}
-              />
-            ) : (
-              <ChatPanel
-                entries={entries}
-                puedeChatear={!!anthropicConfigurado}
-                enviando={enviando}
-                subiendo={subiendo}
-                onEnviarMensaje={enviarMensaje}
-                onSubirArchivo={subirArchivo}
-                actions={{
-                  proyectoId: proyecto.id,
-                  onConfirmarExtraccion: confirmarExtraccion,
-                  onGuardarEdicionPieza: guardarEdicionPieza,
-                  onConfirmarModelo: confirmarModelo,
-                  onAprobarFinal: aprobarFinal,
-                  onRechazar: rechazar,
-                  confirmandoExtraccion,
-                  confirmandoModelo,
-                  bridgeConectado: !!bridgeWindows,
-                  mastercamInstalado: !!bridgeWindows?.mastercam_instalado,
-                }}
-              />
-            )}
+        {seccion === "simulacion" ? (
+          <div className="min-h-0 flex-1">
+            <SimulacionEstandaloneView />
           </div>
+        ) : (
+          <div className="flex min-h-0 flex-1">
+            <div
+              className={`min-w-0 flex-1 flex-col border-r border-[var(--color-border)] ${
+                vistaMobile === "chat" ? "flex" : "hidden"
+              } lg:flex`}
+            >
+              {cargandoInicial ? null : !proyecto ? (
+                <EmptyState
+                  onNuevoProyecto={crearProyecto}
+                  creando={creando}
+                  errorAlCargar={errorListaProyectos}
+                  onReintentar={cargarProyectos}
+                />
+              ) : (
+                <ChatPanel
+                  entries={entries}
+                  puedeChatear={!!anthropicConfigurado}
+                  enviando={enviando}
+                  subiendo={subiendo}
+                  onEnviarMensaje={enviarMensaje}
+                  onSubirArchivo={subirArchivo}
+                  actions={{
+                    proyectoId: proyecto.id,
+                    onConfirmarExtraccion: confirmarExtraccion,
+                    onGuardarEdicionPieza: guardarEdicionPieza,
+                    onConfirmarModelo: confirmarModelo,
+                    onAprobarFinal: aprobarFinal,
+                    onRechazar: rechazar,
+                    confirmandoExtraccion,
+                    confirmandoModelo,
+                    bridgeConectado: !!bridgeWindows,
+                    mastercamInstalado: !!bridgeWindows?.mastercam_instalado,
+                  }}
+                />
+              )}
+            </div>
 
-          <div className={`w-full shrink-0 overflow-hidden lg:w-[380px] ${vistaMobile === "detalles" ? "block" : "hidden"} lg:block`}>
-            {proyecto && <RightPanel proyecto={proyecto} />}
+            <div className={`w-full shrink-0 overflow-hidden lg:w-[380px] ${vistaMobile === "detalles" ? "block" : "hidden"} lg:block`}>
+              {proyecto && <RightPanel proyecto={proyecto} />}
+            </div>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );

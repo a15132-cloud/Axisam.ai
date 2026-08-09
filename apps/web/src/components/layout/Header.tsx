@@ -1,5 +1,4 @@
-import { motion } from "framer-motion";
-import { Cpu, Menu, Wifi, WifiOff } from "lucide-react";
+import { Menu } from "lucide-react";
 import { PipelineStepper } from "../pipeline/PipelineStepper";
 import type { Etapa } from "../../lib/types";
 
@@ -8,7 +7,6 @@ export type VistaMobile = "chat" | "detalles";
 interface HeaderProps {
   nombreProyecto: string;
   etapa: Etapa | null;
-  anthropicConfigurado: boolean | null;
   onAbrirMenu: () => void;
   vistaMobile: VistaMobile;
   onCambiarVistaMobile: (vista: VistaMobile) => void;
@@ -18,7 +16,6 @@ interface HeaderProps {
 export function Header({
   nombreProyecto,
   etapa,
-  anthropicConfigurado,
   onAbrirMenu,
   vistaMobile,
   onCambiarVistaMobile,
@@ -42,26 +39,6 @@ export function Header({
               <p className="hidden text-xs text-[var(--color-text-muted)] sm:block">Diseño CAD y manufactura CAM automatizados</p>
             </div>
           </div>
-
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            className="flex shrink-0 items-center gap-2 rounded-full border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-1.5 text-xs"
-          >
-            <Cpu className="h-3.5 w-3.5 text-[var(--color-text-muted)]" />
-            <span className="hidden text-[var(--color-text-muted)] sm:inline">Asistente:</span>
-            {anthropicConfigurado === null ? (
-              <span className="text-[var(--color-text-faint)]">verificando…</span>
-            ) : anthropicConfigurado ? (
-              <span className="flex items-center gap-1 text-[var(--color-ok)]">
-                <Wifi className="h-3 w-3" /> en línea
-              </span>
-            ) : (
-              <span className="flex items-center gap-1 text-[var(--color-warn)]">
-                <WifiOff className="h-3 w-3" /> no disponible
-              </span>
-            )}
-          </motion.div>
         </div>
 
         {etapa && <PipelineStepper etapa={etapa} />}

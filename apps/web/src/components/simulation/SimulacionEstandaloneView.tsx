@@ -1,0 +1,193 @@
+import { useEffect, useRef, useState } from "react";
+import { Upload, Play, Pause, RotateCcw, FileCode, Box } from "lucide-react";
+import { ToolpathViewer } from "./ToolpathViewer";
+import { parsearGCode, type ResultadoParseoGCode } from "../../lib/gcodeParser";
+import { ErrorBoundary } from "../system/ErrorBoundary";
+import { WarningBanner } from "../common/WarningBanner";
+
+const VELOCIDADES = [0.5, 1, 2, 4];
+
+export function SimulacionEstandaloneView() {
+  const [stlUrl, setStlUrl] = useState<string | null>(null);
+  const [nombreModelo, setNombreModelo] = useState<string | null>(null);
+  const [nombreGcode, setNombreGcode] = useState<string | null>(null);
+  const [resultado, setResultado] = useState<ResultadoParseoGCode | null>(null);
+  const [errorLectura, setErrorLectura] = useState<string | null>(null);
+
+  const [reproduciendo, setReproduciendo] = useState(false);
+  const [velocidad, setVelocidad] = useState(1);
+  const [progreso, setProgreso] = useState(0);
+  const progresoRef = useRef(0);
+
+  const inputModeloRef = useRef<HTMLInputElement>(null);
+  const inputGcodeRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    return () => {
+      if (stlUrl) URL.revokeObjectURL(stlUrl);
+    };
+  }, [stlUrl]);
+
+  function manejarModelo(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    e.target.value = "";
+    if (!archivo) return;
+    setErrorLectura(null);
+    if (!archivo.name.toLowerCase().endsWith(".stl")) {
+      setErrorLectura(
+        "Este visor solo puede mostrar archivos .STL directamente en el navegador (no .STEP) - descarga el STL desde el proyecto (junto al STEP) y súbelo aquí."
+      );
+      return;
+    }
+    if (stlUrl) URL.revokeObjectURL(stlUrl);
+    setStlUrl(URL.createObjectURL(archivo));
+    setNombreModelo(archivo.name);
+  }
+
+  async function manejarGcode(e: React.ChangeEvent<HTMLInputElement>) {
+    const archivo = e.target.files?.[0];
+    e.target.value = "";
+    if (!archivo) return;
+    setErrorLectura(null);
+    try {
+      const texto = await archivo.text();
+      const parseo = parsearGCode(texto);
+      if (parseo.segmentos.length === 0) {
+        setErrorLectura("No se encontró ningún movimiento reconocible en este archivo de código G.");
+        setResultado(null);
+        return;
+      }
+      setResultado(parseo);
+      setNombreGcode(archivo.name);
+      setReproduciendo(false);
+      setProgreso(0);
+      progresoRef.current = 0;
+    } catch {
+      setErrorLectura("No se pudo leer el archivo de código G - asegúrate de que sea un archivo de texto plano.");
+    }
+  }
+
+  function reiniciar() {
+    setReproduciendo(false);
+    setProgreso(0);
+    progresoRef.current = 0;
+  }
+
+  const longitudTotal =
+    resultado?.segmentos.reduce((acc, s) => acc + Math.hypot(s.hasta[0] - s.desde[0], s.hasta[1] - s.desde[1], s.hasta[2] - s.desde[2]), 0) ?? 0;
+
+  return (
+    <div className="flex h-full min-h-0 flex-col overflow-y-auto scrollbar-thin p-4 sm:p-6">
+      <div className="mb-4">
+        <h2 className="font-display text-lg font-semibold text-[var(--color-text)]">Simulación de código G</h2>
+        <p className="mt-1 max-w-2xl text-xs text-[var(--color-text-muted)]">
+          Sube un modelo (.STL) y un archivo de código G para ver la trayectoria de la herramienta antes de cargarla en la
+          máquina. Esta es una vista independiente - no crea ni modifica ningún proyecto. Muestra exactamente por dónde
+          pasa el centro de la herramienta y en qué orden, tal como está escrito en el archivo -{" "}
+          <strong className="text-[var(--color-text)]">no verifica colisiones contra el material o las mordazas</strong>, eso
+          lo sigue haciendo un maquinista antes de maquinar.
+        </p>
+      </div>
+
+      <div className="mb-4 flex flex-wrap gap-2">
+        <input ref={inputModeloRef} type="file" accept=".stl" className="hidden" onChange={manejarModelo} />
+        <button
+          onClick={() => inputModeloRef.current?.click()}
+          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-3)]"
+        >
+          <Box className="h-4 w-4 text-[var(--color-accent)]" />
+          {nombreModelo ?? "Subir modelo (.STL)"}
+        </button>
+
+        <input ref={inputGcodeRef} type="file" className="hidden" onChange={manejarGcode} />
+        <button
+          onClick={() => inputGcodeRef.current?.click()}
+          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-3)]"
+        >
+          <FileCode className="h-4 w-4 text-[var(--color-accent)]" />
+          {nombreGcode ?? "Subir código G"}
+        </button>
+      </div>
+
+      {errorLectura && <p className="mb-3 text-xs text-[var(--color-danger)]">{errorLectura}</p>}
+
+      {resultado && resultado.advertencias.length > 0 && (
+        <div className="mb-4">
+          <WarningBanner title="Advertencias al interpretar el código G" items={resultado.advertencias} />
+        </div>
+      )}
+
+      {!resultado ? (
+        <div className="flex flex-1 flex-col items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--color-border)] py-16 text-center text-sm text-[var(--color-text-faint)]">
+          <Upload className="h-6 w-6" />
+          Sube un archivo de código G para empezar. El modelo .STL es opcional pero ayuda a ver la trayectoria en contexto.
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col gap-3">
+          <div className="min-h-[360px] flex-1">
+            <ErrorBoundary compact>
+              <ToolpathViewer
+                stlUrl={stlUrl}
+                segmentos={resultado.segmentos}
+                reproduciendo={reproduciendo}
+                velocidad={velocidad}
+                progreso={progreso}
+                progresoRef={progresoRef}
+                onProgreso={setProgreso}
+              />
+            </ErrorBoundary>
+          </div>
+
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2.5">
+            <button
+              onClick={() => setReproduciendo((r) => !r)}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)] text-black"
+              title={reproduciendo ? "Pausar" : "Reproducir"}
+            >
+              {reproduciendo ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+            </button>
+            <button
+              onClick={reiniciar}
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)]"
+              title="Reiniciar"
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+
+            <input
+              type="range"
+              min={0}
+              max={longitudTotal || 1}
+              step={longitudTotal / 1000 || 1}
+              value={progreso}
+              onChange={(e) => {
+                const v = Number(e.target.value);
+                setProgreso(v);
+                progresoRef.current = v;
+                setReproduciendo(false);
+              }}
+              className="min-w-[120px] flex-1 accent-[var(--color-accent)]"
+            />
+
+            <div className="flex shrink-0 items-center gap-1 text-xs text-[var(--color-text-muted)]">
+              {VELOCIDADES.map((v) => (
+                <button
+                  key={v}
+                  onClick={() => setVelocidad(v)}
+                  className={`rounded px-1.5 py-0.5 ${velocidad === v ? "bg-[var(--color-accent)] text-black" : "hover:bg-[var(--color-surface-3)]"}`}
+                >
+                  {v}x
+                </button>
+              ))}
+            </div>
+
+            <span className="shrink-0 text-[10px] text-[var(--color-text-faint)]">
+              {resultado.segmentos.length} movimientos · {Math.round(longitudTotal)} mm de recorrido
+              {resultado.lineasIgnoradas > 0 ? ` · ${resultado.lineasIgnoradas} líneas sin movimiento ignoradas` : ""}
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}

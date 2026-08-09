@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Plus, MessageSquare, Trash2, X, Cable, Pencil, Check, Loader2 } from "lucide-react";
+import { Plus, MessageSquare, Trash2, X, Cable, Pencil, Check, Loader2, PlayCircle } from "lucide-react";
 import { AxiscamLogo } from "../logo/AxiscamLogo";
 import type { BridgeWindowsStatus, Proyecto } from "../../lib/types";
 
@@ -29,6 +29,8 @@ interface SidebarProps {
   abierto: boolean;
   onCerrar: () => void;
   bridgeWindows: BridgeWindowsStatus | null;
+  seccion: "proyectos" | "simulacion";
+  onCambiarSeccion: (s: "proyectos" | "simulacion") => void;
 }
 
 function EstadoBridge({ bridgeWindows }: { bridgeWindows: BridgeWindowsStatus | null }) {
@@ -179,7 +181,20 @@ function FilaProyecto({
   );
 }
 
-export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoProyecto, onEliminar, onRenombrar, creando, abierto, onCerrar, bridgeWindows }: SidebarProps) {
+export function Sidebar({
+  proyectos,
+  proyectoActualId,
+  onSeleccionar,
+  onNuevoProyecto,
+  onEliminar,
+  onRenombrar,
+  creando,
+  abierto,
+  onCerrar,
+  bridgeWindows,
+  seccion,
+  onCambiarSeccion,
+}: SidebarProps) {
   return (
     <>
       {/* Backdrop - mobile only, closes the drawer on tap outside */}
@@ -214,6 +229,19 @@ export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoPro
           <BotonNuevoProyecto creando={creando} onClick={onNuevoProyecto} />
         </div>
 
+        <div className="mt-2 px-3">
+          <button
+            onClick={() => onCambiarSeccion(seccion === "simulacion" ? "proyectos" : "simulacion")}
+            className={`flex w-full items-center gap-2 rounded-lg px-3 py-2.5 text-left text-sm transition-colors ${
+              seccion === "simulacion" ? "bg-[var(--color-surface-3)] text-[var(--color-text)]" : "text-[var(--color-text-muted)] hover:bg-[var(--color-surface-2)]"
+            }`}
+            title="Sube un modelo y un código G para ver la trayectoria de la herramienta - no forma parte de ningún proyecto"
+          >
+            <PlayCircle className="h-4 w-4 shrink-0" />
+            Simulación
+          </button>
+        </div>
+
         <div className="mt-4 flex items-center gap-2 px-4 text-[11px] font-medium uppercase tracking-wide text-[var(--color-text-faint)]">
           <MessageSquare className="h-3.5 w-3.5" /> Proyectos recientes
         </div>
@@ -224,7 +252,7 @@ export function Sidebar({ proyectos, proyectoActualId, onSeleccionar, onNuevoPro
             <FilaProyecto
               key={p.id}
               proyecto={p}
-              activo={p.id === proyectoActualId}
+              activo={seccion === "proyectos" && p.id === proyectoActualId}
               onSeleccionar={() => onSeleccionar(p.id)}
               onEliminar={() => onEliminar(p.id)}
               onRenombrar={(nombre) => onRenombrar(p.id, nombre)}

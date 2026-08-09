@@ -65,6 +65,19 @@ class SimboloGDT(BaseModel):
     )
 
 
+class SegmentoChaflanCompuesto(BaseModel):
+    """One stage of a multi-stage countersink/chamfer at a hole entrance -
+    e.g. a plano's "Detalle B" showing 3 conical stages (5mm/20°, 5mm/20°,
+    12mm/30°) stepping a hole open wider at the face than its nominal
+    diameter, instead of a single simple chamfer. List these in order
+    from the face INWARD (matches how such details are normally
+    dimensioned on a plano - depth callouts read face-to-bore).
+    """
+
+    profundidad_mm: float = Field(description="Profundidad de esta etapa a lo largo del eje del barreno, en mm")
+    angulo_grados: float = Field(description="Angulo incluido (total, no medio-angulo) del cono de esta etapa, en grados")
+
+
 class Feature(BaseModel):
     id: Optional[str] = None
     tipo: TipoFeature
@@ -87,6 +100,15 @@ class Feature(BaseModel):
     tolerancia_mm: Optional[float] = None
     rosca: Optional[str] = Field(default=None, description="Especificacion de rosca, p.ej. 'M8x1.25'")
     gdt: list[SimboloGDT] = Field(default_factory=list)
+    chaflanes_compuestos: Optional[list[SegmentoChaflanCompuesto]] = Field(
+        default=None,
+        description=(
+            "Solo para tipo=barreno/barreno_roscado: etapas de un avellanado/chaflan compuesto de multiples "
+            "conos en la entrada del barreno (ver SegmentoChaflanCompuesto). Si el barreno es pasante, se "
+            "aplica espejado identico en ambas caras - el plano casi siempre lo dibuja simetrico (p.ej. "
+            "'Detalle B' y 'Detalle C' como espejo exacto uno del otro)."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_shape_params(self) -> "Feature":

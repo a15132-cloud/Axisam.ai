@@ -2,6 +2,7 @@ import { Suspense, useMemo, useRef } from "react";
 import { Canvas, useFrame, useLoader } from "@react-three/fiber";
 import { Bounds, Center, OrbitControls } from "@react-three/drei";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import * as THREE from "three";
 import type { SegmentoTrayectoria } from "../../lib/gcodeParser";
 
@@ -18,7 +19,15 @@ function colorDe(tipo: SegmentoTrayectoria["tipo"]): string {
 }
 
 function StlMesh({ url }: { url: string }) {
-  const geometry = useLoader(STLLoader, url);
+  const geometriaCruda = useLoader(STLLoader, url);
+  // See viewer/StlViewer.tsx's StlMesh for why this weld+recompute step is
+  // required for round features (drilled holes, fillets) to render smooth
+  // instead of visibly faceted.
+  const geometry = useMemo(() => {
+    const g = mergeVertices(geometriaCruda);
+    g.computeVertexNormals();
+    return g;
+  }, [geometriaCruda]);
   const material = useMemo(
     () => new THREE.MeshStandardMaterial({ color: "#c2beb4", metalness: 0.35, roughness: 0.4, transparent: true, opacity: 0.55 }),
     []

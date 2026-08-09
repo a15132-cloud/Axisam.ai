@@ -5,7 +5,7 @@ import pytest
 
 from app.geometry.builder import GeometryBuildError, build_pieza
 from app.geometry.export import calcular_propiedades, exportar_step, exportar_stl
-from app.schemas.piece import Dimensiones, Feature, FormaBase, Material, Pieza, Posicion2D, TipoFeature
+from app.schemas.piece import Dimensiones, Feature, FormaBase, Material, Pieza, Posicion2D, SegmentoChaflanCompuesto, TipoFeature
 
 
 def _placa_soporte() -> Pieza:
@@ -434,3 +434,82 @@ def test_redondeo_con_posicion_afecta_solo_esa_esquina():
     volumen_esperado_removido_por_el_redondeo = (10.0**2) * (1 - math.pi / 4) * 15
     volumen_removido_real = volumen_base - props["volumen_mm3"]
     assert volumen_removido_real == pytest.approx(volumen_esperado_removido_por_el_redondeo, rel=0.01)
+
+
+def _placa_con_chaflan_compuesto(pasante: bool = True) -> Pieza:
+    segmentos = [
+        SegmentoChaflanCompuesto(profundidad_mm=5.0, angulo_grados=20.0),
+        SegmentoChaflanCompuesto(profundidad_mm=5.0, angulo_grados=20.0),
+        SegmentoChaflanCompuesto(profundidad_mm=12.0, angulo_grados=30.0),
+    ]
+    return Pieza(
+        pieza="placa_con_avellanado",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=80, ancho_mm=80, espesor_mm=44),
+        features=[
+            Feature(
+                id="f1", tipo=TipoFeature.BARRENO, diametro_mm=22, pasante=pasante,
+                posicion=Posicion2D(x=40, y=40), chaflanes_compuestos=segmentos,
+            )
+        ],
+    )
+
+
+def test_chaflan_compuesto_no_crashea_y_no_se_omite():
+    """Found missing on a real client part (a DeAcero shear blade): each
+    hole has a 3-stage countersink at BOTH ends (Detalle B/Detalle C on
+    the plano), not a simple single-angle chamfer - the geometry engine
+    had no way to represent that at all before this feature existed.
+    """
+    resultado = build_pieza(_placa_con_chaflan_compuesto())
+    assert resultado.advertencias == []
+    assert resultado.features_omitidos == []
+
+
+def test_chaflan_compuesto_remueve_mas_volumen_que_el_barreno_liso():
+    con_chaflan = calcular_propiedades(build_pieza(_placa_con_chaflan_compuesto()).solido)["volumen_mm3"]
+
+    pieza_lisa = _placa_con_chaflan_compuesto()
+    pieza_lisa.features[0].chaflanes_compuestos = None
+    sin_chaflan = calcular_propiedades(build_pieza(pieza_lisa).solido)["volumen_mm3"]
+
+    assert con_chaflan < sin_chaflan
+
+
+def test_chaflan_compuesto_radio_en_la_cara_coincide_con_la_geometria_de_los_conos():
+    """Cross-check the volume actually removed against the exact analytic
+    volume of the 3 stacked frustums (both ends, since pasante) plus the
+    straight bore in between - if the cone radii/heights were wired up
+    wrong this is what would catch it, not just "some volume disappeared".
+    """
+    import math as m
+
+    pieza = _placa_con_chaflan_compuesto()
+    resultado = build_pieza(pieza)
+    props = calcular_propiedades(resultado.solido)
+    volumen_removido = 80 * 80 * 44 - props["volumen_mm3"]
+
+    r_bore = 11.0
+    segmentos = [(5.0, 20.0), (5.0, 20.0), (12.0, 30.0)]
+    radios = [r_bore]
+    for prof, ang in reversed(segmentos):
+        radios.append(radios[-1] + prof * m.tan(m.radians(ang / 2)))
+    radios.reverse()
+
+    def volumen_frustum(r1, r2, h):
+        return (m.pi * h / 3) * (r1**2 + r1 * r2 + r2**2)
+
+    volumen_un_extremo = sum(volumen_frustum(radios[i], radios[i + 1], prof) for i, (prof, _) in enumerate(segmentos))
+    profundidad_recta = 44 - 2 * sum(prof for prof, _ in segmentos)
+    volumen_recto = m.pi * r_bore**2 * profundidad_recta
+    volumen_esperado = 2 * volumen_un_extremo + volumen_recto
+
+    assert volumen_removido == pytest.approx(volumen_esperado, rel=0.02)
+
+
+def test_chaflan_compuesto_no_pasante_solo_corta_una_cara():
+    resultado_pasante = build_pieza(_placa_con_chaflan_compuesto(pasante=True))
+    resultado_ciego = build_pieza(_placa_con_chaflan_compuesto(pasante=False))
+    vol_pasante = calcular_propiedades(resultado_pasante.solido)["volumen_mm3"]
+    vol_ciego = calcular_propiedades(resultado_ciego.solido)["volumen_mm3"]
+    assert vol_ciego > vol_pasante  # the blind version is missing the mirrored bottom cut + rest of the through-bore

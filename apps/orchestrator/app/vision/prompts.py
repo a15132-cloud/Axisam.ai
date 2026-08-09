@@ -63,6 +63,20 @@ COMO LEER EL PLANO:
     que se queda sin modelar por falta de UNA cota es peor que dejar profundidad_mm en null con
     una nota clara: lo primero pierde la pieza completa en silencio, lo segundo se ve y se puede
     resolver.
+3e. Un "Detalle" ampliado (escala 2:1, 2.5:1, etc.) sobre la entrada de un barreno que muestra
+    VARIOS conos/angulos apilados en vez de un chaflan simple (p.ej. dos o mas etapas, cada una
+    con su propia profundidad y angulo) es un avellanado/chaflan COMPUESTO, no un `chaflan`
+    normal - un chaflan simple solo tiene una profundidad y un angulo. Usa
+    `Feature.chaflanes_compuestos` en el barreno mismo (no un feature aparte): una lista de
+    etapas, cada una con `profundidad_mm` y `angulo_grados` (angulo incluido del cono, no
+    medio-angulo), en orden desde la cara hacia el barreno recto. Si el barreno es pasante y el
+    plano muestra el mismo detalle espejado en el otro extremo (dos Detalles distintos, uno por
+    cara, con las mismas profundidades/angulos en orden invertido) - eso YA lo maneja el motor
+    automaticamente con una sola lista de etapas, no dupliques el feature. Si el detalle da una
+    cota de diametro o radio en algun punto intermedio del cono (no solo las profundidades y
+    angulos), inclúyela en `extraccion.notas` con el punto exacto donde se mide aunque no haya
+    campo dedicado para guardarla - sirve para que el humano que revise confirme que el angulo
+    calculado da ese mismo diametro, y para detectar si tu lectura del angulo esta mal.
 4. Simbolos GD&T (ISO 1101 / ASME Y14.5) - mapea el simbolo al campo `tipo` usando estos nombres:
    planitud, rectitud, circularidad, cilindricidad, perfil_linea, perfil_superficie,
    paralelismo, perpendicularidad, angularidad, posicion, concentricidad, simetria,
@@ -118,6 +132,12 @@ NO es re-extraer desde cero - es auditar activamente lo que ya existe, buscando 
    nota especifica; si no lo esta, agregalo.
 5. CAJETIN: material, dureza, tolerancia general, cantidad, escala - confirma que coinciden
    textualmente con lo que dice el cajetin, no una paráfrasis.
+6. DETALLES AMPLIADOS ("Detalle A/B/C", escala 2:1, 2.5:1, etc.) sobre un barreno: confirma que
+   cada uno quedo representado. Si el detalle muestra varias etapas conicas (varios angulos y
+   profundidades apiladas, no un solo chaflan), confirma que esta en `chaflanes_compuestos` del
+   barreno (ver regla 3e del prompt de extraccion) - un chaflan simple con un solo angulo no es
+   suficiente para ese caso, y omitirlo entero deja la pieza plana donde el plano muestra un
+   avellanado real.
 
 Cuando corrijas el JSON, parte del JSON que recibiste y modificalo - no lo reconstruyas desde
 cero. `campos_baja_confianza` y `notas` de la primera pasada casi siempre siguen siendo validos;

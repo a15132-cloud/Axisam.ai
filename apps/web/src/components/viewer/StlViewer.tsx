@@ -2,10 +2,23 @@ import { Suspense, useMemo } from "react";
 import { Canvas, useLoader } from "@react-three/fiber";
 import { Bounds, Center, OrbitControls } from "@react-three/drei";
 import { STLLoader } from "three/examples/jsm/loaders/STLLoader.js";
+import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 import * as THREE from "three";
 
 function StlMesh({ url }: { url: string }) {
-  const geometry = useLoader(STLLoader, url);
+  const geometriaCruda = useLoader(STLLoader, url);
+  // STLLoader produces a non-indexed geometry - every triangle owns its own
+  // 3 vertices even where they coincide with a neighboring triangle's, so
+  // computeVertexNormals() alone has nothing to average across and every
+  // face stays flat-shaded (a round hole renders as a visibly faceted
+  // polygon instead of a smooth cylinder). mergeVertices welds coincident
+  // positions into a shared, indexed vertex first, so the normals computed
+  // afterward are real smoothed per-vertex normals across the mesh.
+  const geometry = useMemo(() => {
+    const g = mergeVertices(geometriaCruda);
+    g.computeVertexNormals();
+    return g;
+  }, [geometriaCruda]);
   const material = useMemo(
     () => new THREE.MeshStandardMaterial({ color: "#c2beb4", metalness: 0.4, roughness: 0.38 }),
     []

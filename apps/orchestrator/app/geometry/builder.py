@@ -36,6 +36,11 @@ into the bottom face from a single feature; model that as two features
 with forma_base flipped if it's ever needed, rather than adding a second
 face-selection field pre-emptively.
 
+feature.chaflanes_compuestos (on a barreno/barreno_roscado): a multi-stage
+countersink at the hole entrance - e.g. a plano's zoomed "Detalle B/C"
+showing several conical stages instead of one simple chamfer. See
+SegmentoChaflanCompuesto and _cortar_chaflanes_compuestos.
+
 Everything unsupported surfaces as a clear warning or error so a human
 catches it at the Capa 6 model-preview checkpoint - never modeled blindly.
 """
@@ -146,6 +151,61 @@ def _cortar_barreno(solido: cq.Workplane, feature: Feature, pos: Posicion2D, esp
     diametro = feature.diametro_mm or 5.0
     herramienta = _workplane_en(pos.x, pos.y, z0).circle(diametro / 2).extrude(dz)
     return solido.cut(herramienta)
+
+
+def _radios_chaflan_compuesto(segmentos: list, radio_base: float) -> list[float]:
+    """Radius at each stage boundary, face-order (index 0 = at the face,
+    last index = at the bore, equal to radio_base). `segmentos` are given
+    face-to-bore (matches how a plano dimensions them); the only fixed,
+    known radius is at the BORE end (the hole's own nominal radius), so
+    this walks backward from there, growing the radius outward stage by
+    stage via each stage's own half-angle - the face radius is a computed
+    RESULT of the stages, not an independent input.
+    """
+    radios = [radio_base]
+    for seg in reversed(segmentos):
+        radios.append(radios[-1] + seg.profundidad_mm * math.tan(math.radians(seg.angulo_grados / 2)))
+    radios.reverse()
+    return radios
+
+
+def _cortar_chaflan_compuesto_una_cara(
+    solido: cq.Workplane, pos: Posicion2D, segmentos: list, radio_base: float, z_cara: float, signo: float
+) -> cq.Workplane:
+    """One face's stack of conical frustums, face-to-bore, fused into one
+    tool and cut in a single boolean op. `signo` is +1 to cut upward from
+    the bottom face (z increasing into the part) or -1 to cut downward
+    from the top face (z decreasing into the part) - see the two call
+    sites in _cortar_chaflanes_compuestos.
+    """
+    radios = _radios_chaflan_compuesto(segmentos, radio_base)
+    z = z_cara
+    conos = []
+    for i, seg in enumerate(segmentos):
+        r_cara, r_bore = radios[i], radios[i + 1]
+        pnt = cq.Vector(pos.x, pos.y, z)
+        dir_vec = cq.Vector(0.0, 0.0, signo)
+        conos.append(cq.Solid.makeCone(r_cara, r_bore, seg.profundidad_mm, pnt=pnt, dir=dir_vec))
+        z += signo * seg.profundidad_mm
+    herramienta = conos[0]
+    for cono in conos[1:]:
+        herramienta = herramienta.fuse(cono)
+    return solido.cut(cq.Workplane(obj=herramienta))
+
+
+def _cortar_chaflanes_compuestos(solido: cq.Workplane, feature: Feature, pos: Posicion2D, espesor: float) -> cq.Workplane:
+    """Multi-stage countersink/chamfer at a hole's entrance (see
+    SegmentoChaflanCompuesto) - cut from the top face, and mirrored at the
+    bottom face too if the hole is pasante (the overwhelmingly common case
+    on a real plano: a symmetric detail called out at both ends of a
+    through-hole, e.g. "Detalle B" / "Detalle C" as an exact mirror pair).
+    """
+    segmentos = feature.chaflanes_compuestos
+    radio_base = (feature.diametro_mm or 5.0) / 2
+    solido = _cortar_chaflan_compuesto_una_cara(solido, pos, segmentos, radio_base, espesor, -1.0)
+    if feature.pasante:
+        solido = _cortar_chaflan_compuesto_una_cara(solido, pos, segmentos, radio_base, 0.0, 1.0)
+    return solido
 
 
 def _agregar_saliente_cilindrico(solido: cq.Workplane, feature: Feature, pos: Posicion2D, espesor: float) -> cq.Workplane:
@@ -392,6 +452,8 @@ def build_pieza(pieza: Pieza) -> BuildResult:
                     solido = _cortar_barreno_lateral(solido, f, pos, dims, f.cara)
                 else:
                     solido = _cortar_barreno(solido, f, pos, dims.espesor_mm)
+                    if f.chaflanes_compuestos:
+                        solido = _cortar_chaflanes_compuestos(solido, f, pos, dims.espesor_mm)
                 if f.tipo == TipoFeature.BARRENO_ROSCADO:
                     advertencias.append(
                         f"barreno_roscado {f.rosca or ''} (id={f.id or '?'}): modelado como barreno liso "

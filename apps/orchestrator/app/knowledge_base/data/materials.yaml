@@ -156,6 +156,31 @@ materiales:
     refrigerante: no_recomendado
     validado_por: null
 
+  d2:
+    nombre_display: "D2 (acero para herramienta, recocido)"
+    familia: acero_herramienta
+    maquinabilidad: 35
+    dureza_hb: 230
+    vc_recomendada_m_min: 35
+    avance_por_diente_mm:
+      broca: 0.05
+      fresa_carburo: 0.035
+      fresa_hss: 0.018
+    refrigerante: requerido
+    notas: >
+      Valores para D2 RECOCIDO (~230 HB), la condicion normal en que se
+      maquina - la practica estandar de taller es maquinar la geometria
+      completa en estado recocido y aplicar temple-revenido DESPUES,
+      exactamente como indica una nota de tratamiento termico posterior en
+      el plano. Si una operacion especifica de este proyecto se maquina
+      DESPUES del temple (pieza ya a 58-60 HRC u otra dureza alta), estos
+      parametros NO aplican - se necesita herramienta para alta dureza
+      (CBN, ceramica, o carburo especial para acero endurecido) y
+      velocidades muy distintas. Alto contenido de cromo (~12%) - abrasivo
+      para la herramienta incluso recocido, por eso vc conservadora pese a
+      dureza similar a un acero aleado Q&T comun.
+    validado_por: null
+
   titanio_grado5:
     nombre_display: "Titanio Grado 5 (Ti-6Al-4V)"
     familia: titanio

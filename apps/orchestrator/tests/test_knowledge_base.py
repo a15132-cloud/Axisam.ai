@@ -10,6 +10,17 @@ def test_buscar_material_conocido():
     assert info["vc_recomendada_m_min"] == 300
 
 
+def test_buscar_material_d2_por_nombre_de_cliente_real():
+    """D2 added specifically after a real customer drawing (DeAcero) used
+    it and had zero CAM operations planned as a result - MaterialNoEncontrado
+    silently meant "no G-code at all" for a real hardened-tool-steel part.
+    """
+    info = rules.buscar_material(Material(nombre="D2"))
+    assert info["clave"] == "d2"
+    assert info["vc_recomendada_m_min"] > 0
+    assert info["refrigerante"] == "requerido"
+
+
 def test_buscar_material_desconocido_lanza_error():
     with pytest.raises(rules.MaterialNoEncontrado):
         rules.buscar_material(Material(nombre="Unobtainium"))
@@ -25,6 +36,17 @@ def test_seleccionar_broca_redondea_hacia_arriba():
     h = rules.seleccionar_broca(7.2)
     assert h.diametro_mm == 8.0
     assert not h.exacta
+
+
+def test_seleccionar_broca_22mm_por_pieza_de_cliente_real():
+    """Ø22 added specifically after the DeAcero drawing's 6 mounting holes
+    (22mm H-fit) fell out of catalog range (previously topped at 20mm) and
+    silently machined with the wrong tool diameter - RPM/feed were computed
+    for 20mm, not the 22mm the drawing actually calls for.
+    """
+    h = rules.seleccionar_broca(22.0)
+    assert h.diametro_mm == 22.0
+    assert h.exacta
 
 
 def test_planear_operacion_barreno():

@@ -16,7 +16,10 @@ brocas:
   - diametro_mm: 12.0
   - diametro_mm: 12.5
   - diametro_mm: 16.0
+  - diametro_mm: 18.0
   - diametro_mm: 20.0
+  - diametro_mm: 22.0
+  - diametro_mm: 25.0
 
 fresas_planas_carburo:
   - diametro_mm: 3.0

@@ -1,3 +1,4 @@
+import math
 from pathlib import Path
 
 import pytest
@@ -265,3 +266,80 @@ def test_barreno_lateral_en_base_circular_se_omite():
     )
     resultado = build_pieza(pieza)
     assert any("base rectangular" in o for o in resultado.features_omitidos)
+
+
+def test_ranura_tiene_extremos_realmente_redondeados_no_rectangulo():
+    """The removed volume must match a real stadium shape (rectangle +
+    two half-circle caps), not a sharp-cornered rectangle - the exact
+    complaint that drove this fix. A sharp rectangle of the same
+    largo x ancho would remove strictly MORE material than a slot with
+    rounded ends (the rounded caps leave the corner material in place),
+    so this is a real, discriminating geometric check, not a smoke test.
+    """
+    ancho, largo, espesor = 10.0, 30.0, 8.0
+    pieza = Pieza(
+        pieza="placa_con_ranura",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=espesor),
+        features=[Feature(id="r1", tipo=TipoFeature.RANURA, ancho_mm=ancho, largo_mm=largo, posicion=Posicion2D(x=50, y=30))],
+    )
+    resultado = build_pieza(pieza)
+    assert resultado.advertencias == []  # the old "modeled as a rectangle" warning must be GONE for a real slot
+    props = calcular_propiedades(resultado.solido)
+
+    volumen_base = 100 * 60 * espesor
+    volumen_removido = volumen_base - props["volumen_mm3"]
+
+    largo_recto = largo - ancho
+    area_stadium = largo_recto * ancho + math.pi * (ancho / 2) ** 2
+    volumen_esperado_stadium = area_stadium * espesor
+    volumen_rectangulo_afilado = largo * ancho * espesor
+
+    assert volumen_removido == pytest.approx(volumen_esperado_stadium, rel=0.01)
+    assert volumen_removido < volumen_rectangulo_afilado - 1.0  # meaningfully less - the rounded corners are real
+
+
+def test_ranura_muy_corta_cae_a_rectangulo_con_advertencia():
+    """slot2D can't build a slot shorter than it is wide (degenerate case,
+    not something a real end mill would call a "slot" anyway) - must fall
+    back safely with an honest warning, never silently produce nothing.
+    """
+    pieza = Pieza(
+        pieza="placa",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="r1", tipo=TipoFeature.RANURA, ancho_mm=10, largo_mm=8, posicion=Posicion2D(x=50, y=30))],
+    )
+    resultado = build_pieza(pieza)
+    assert any("no se puede construir como ranura" in a for a in resultado.advertencias)
+
+
+def test_redondeo_con_posicion_afecta_solo_esa_esquina():
+    """Exactly the real gap reported on PM-001: a plano calling out R10 at
+    ONE specific corner (not all four) needs that one corner rounded and
+    the rest left sharp - the old behavior (no `posicion` support) could
+    only do all-or-nothing.
+    """
+    perfil = [
+        Posicion2D(x=0, y=0), Posicion2D(x=30, y=0), Posicion2D(x=30, y=10),
+        Posicion2D(x=90, y=10), Posicion2D(x=90, y=0), Posicion2D(x=120, y=0),
+        Posicion2D(x=120, y=65), Posicion2D(x=80, y=65), Posicion2D(x=80, y=80),
+        Posicion2D(x=40, y=80), Posicion2D(x=40, y=65), Posicion2D(x=0, y=65),
+    ]
+    pieza = Pieza(
+        pieza="PM-001",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.POLIGONAL, espesor_mm=15, puntos_perfil_mm=perfil),
+        features=[Feature(id="r10", tipo=TipoFeature.REDONDEO, radio_mm=10, posicion=Posicion2D(x=40, y=80))],
+    )
+    resultado = build_pieza(pieza)
+    assert resultado.advertencias == []
+
+    props = calcular_propiedades(resultado.solido)
+    # Footprint = 120x65 main body (7800) - 60x10 bottom notch (600) + 40x15 top tab (600) = 7800mm2 (shoelace-verified).
+    volumen_base = 7800 * 15
+    # A 90-degree R10 corner cut removes r^2*(1 - pi/4) of area, times espesor -
+    # hand-verified directly against cadquery before writing this test.
+    volumen_esperado_removido_por_el_redondeo = (10.0**2) * (1 - math.pi / 4) * 15
+    volumen_removido_real = volumen_base - props["volumen_mm3"]
+    assert volumen_removido_real == pytest.approx(volumen_esperado_removido_por_el_redondeo, rel=0.01)

@@ -179,18 +179,56 @@ def _cortar_rectangulo(
     return solido.cut(herramienta)
 
 
+def _cortar_ranura_redondeada(
+    solido: cq.Workplane, feature: Feature, pos: Posicion2D, espesor: float, ancho: float, largo: float
+) -> cq.Workplane:
+    """A real slot with round ends (a "stadium" shape - what an end mill
+    actually leaves after milling a straight-line groove, since the tool
+    itself is round), via cadquery's own slot2D primitive - not an
+    approximation. `largo` is the true end-to-end length INCLUDING the
+    rounded caps, `ancho` is the slot width (= end-mill diameter). Fully
+    replaces the earlier sharp-rectangle approximation.
+    """
+    z0, dz = _rango_z(feature, espesor)
+    angulo = feature.angulo_grados or 0.0
+    herramienta = _workplane_en(pos.x, pos.y, z0).slot2D(largo, ancho, angle=angulo).extrude(dz)
+    return solido.cut(herramienta)
+
+
+def _arista_vertical_mas_cercana(solido: cq.Workplane, x: float, y: float):
+    """The single "|Z" edge whose XY position is closest to (x, y) - for a
+    prismatic solid every vertical edge sits at exactly one XY point
+    (its bounding box collapses to that point), so this reliably
+    identifies one specific corner rather than all of them.
+    """
+    aristas = solido.edges("|Z").vals()
+    def distancia(arista):
+        bb = arista.BoundingBox()
+        return math.hypot((bb.xmin + bb.xmax) / 2 - x, (bb.ymin + bb.ymax) / 2 - y)
+    return min(aristas, key=distancia)
+
+
 def _aplicar_redondeos_chaflanes(solido: cq.Workplane, features: list[Feature], advertencias: list[str]) -> cq.Workplane:
     """Must run before any hole/pocket cuts: only then are the vertical
     edges of the base ("|Z") exactly the outer corners, unambiguous to
     select. Cutting first would add hole-wall edges to the same selector.
+
+    A feature with `posicion` set targets JUST the one real corner
+    nearest that point (e.g. a plano calling out "R10" at one specific
+    corner, not all four) - this is the common case for anything but a
+    plain symmetric rectangle. No `posicion` still means "every corner",
+    unchanged from before.
     """
     for f in features:
+        objetivo = solido.edges("|Z") if f.posicion is None else solido.newObject([_arista_vertical_mas_cercana(solido, f.posicion.x, f.posicion.y)])
+        etiqueta = "todas las esquinas" if f.posicion is None else f"la esquina en ({f.posicion.x}, {f.posicion.y})"
+
         if f.tipo == TipoFeature.REDONDEO:
             radio = f.radio_mm or 3.0
             try:
-                solido = solido.edges("|Z").fillet(radio)
+                solido = objetivo.fillet(radio)
             except Exception as exc:  # OCCT fillet can fail on tight geometry
-                advertencias.append(f"No se pudo aplicar redondeo R{radio}mm en las esquinas: {exc}")
+                advertencias.append(f"No se pudo aplicar redondeo R{radio}mm en {etiqueta}: {exc}")
         elif f.tipo == TipoFeature.CHAFLAN:
             distancia = f.radio_mm or 2.0
             if f.angulo_grados and not math.isclose(f.angulo_grados, 45.0, abs_tol=1.0):
@@ -199,9 +237,9 @@ def _aplicar_redondeos_chaflanes(solido: cq.Workplane, features: list[Feature], 
                     "soporta chaflan simetrico 45 grados en esta fase - se aplico a 45 grados."
                 )
             try:
-                solido = solido.edges("|Z").chamfer(distancia)
+                solido = objetivo.chamfer(distancia)
             except Exception as exc:
-                advertencias.append(f"No se pudo aplicar chaflan {distancia}mm en las esquinas: {exc}")
+                advertencias.append(f"No se pudo aplicar chaflan {distancia}mm en {etiqueta}: {exc}")
     return solido
 
 
@@ -294,11 +332,14 @@ def build_pieza(pieza: Pieza) -> BuildResult:
             elif f.tipo == TipoFeature.RANURA:
                 ancho = f.ancho_mm or 5.0
                 largo = f.largo_mm or 20.0
-                solido = _cortar_rectangulo(solido, f, pos, dims.espesor_mm, ancho, largo)
-                advertencias.append(
-                    f"ranura (id={f.id or '?'}): modelada como rectangulo - los extremos redondeados "
-                    "por la fresa no estan representados en esta fase."
-                )
+                if largo > ancho:
+                    solido = _cortar_ranura_redondeada(solido, f, pos, dims.espesor_mm, ancho, largo)
+                else:
+                    solido = _cortar_rectangulo(solido, f, pos, dims.espesor_mm, ancho, largo)
+                    advertencias.append(
+                        f"ranura (id={f.id or '?'}): largo_mm ({largo}) no es mayor que ancho_mm ({ancho}) - "
+                        "no se puede construir como ranura con extremos redondeados, se modelo como rectangulo."
+                    )
             elif f.tipo in (TipoFeature.ESCALON, TipoFeature.PERFIL_EXTERIOR):
                 omitidos.append(
                     f"{f.tipo.value} (id={f.id or '?'}): un feature aislado no puede describir un contorno "

@@ -3,6 +3,7 @@ import { Sidebar, BotonNuevoProyecto } from "./components/layout/Sidebar";
 import { Header, type VistaMobile } from "./components/layout/Header";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { RightPanel } from "./components/pipeline/RightPanel";
+import { ModeloFlotante3D } from "./components/pipeline/ModeloFlotante3D";
 import { SimulacionEstandaloneView } from "./components/simulation/SimulacionEstandaloneView";
 import { api, ApiError } from "./lib/api";
 import { derivarEntriesPipeline } from "./lib/deriveEntries";
@@ -257,7 +258,7 @@ export default function App() {
         ) : (
           <div className="flex min-h-0 flex-1">
             <div
-              className={`min-w-0 flex-1 flex-col border-r border-[var(--color-border)] ${
+              className={`relative min-w-0 flex-1 flex-col border-r border-[var(--color-border)] ${
                 vistaMobile === "chat" ? "flex" : "hidden"
               } lg:flex`}
             >
@@ -269,26 +270,29 @@ export default function App() {
                   onReintentar={cargarProyectos}
                 />
               ) : (
-                <ChatPanel
-                  entries={entries}
-                  puedeChatear={!!anthropicConfigurado}
-                  enviando={enviando}
-                  subiendo={subiendo}
-                  onEnviarMensaje={enviarMensaje}
-                  onSubirArchivo={subirArchivo}
-                  actions={{
-                    proyectoId: proyecto.id,
-                    onConfirmarExtraccion: confirmarExtraccion,
-                    onGuardarEdicionPieza: guardarEdicionPieza,
-                    onConfirmarModelo: confirmarModelo,
-                    onAprobarFinal: aprobarFinal,
-                    onRechazar: rechazar,
-                    confirmandoExtraccion,
-                    confirmandoModelo,
-                    bridgeConectado: !!bridgeWindows,
-                    mastercamInstalado: !!bridgeWindows?.mastercam_instalado,
-                  }}
-                />
+                <>
+                  <ChatPanel
+                    entries={entries}
+                    puedeChatear={!!anthropicConfigurado}
+                    enviando={enviando}
+                    subiendo={subiendo}
+                    onEnviarMensaje={enviarMensaje}
+                    onSubirArchivo={subirArchivo}
+                    actions={{
+                      proyectoId: proyecto.id,
+                      onConfirmarExtraccion: confirmarExtraccion,
+                      onGuardarEdicionPieza: guardarEdicionPieza,
+                      onConfirmarModelo: confirmarModelo,
+                      onAprobarFinal: aprobarFinal,
+                      onRechazar: rechazar,
+                      confirmandoExtraccion,
+                      confirmandoModelo,
+                      bridgeConectado: !!bridgeWindows,
+                      mastercamInstalado: !!bridgeWindows?.mastercam_instalado,
+                    }}
+                  />
+                  <ModeloFlotante3D proyecto={proyecto} />
+                </>
               )}
             </div>
 

@@ -32,9 +32,9 @@ function StlMesh({ url }: { url: string }) {
 // for a shop tool that may run on an isolated network. Lighting is manual
 // and self-contained instead; <Bounds> auto-fits the camera without any
 // network dependency.
-export function StlViewer({ url }: { url: string }) {
+export function StlViewer({ url, heightClassName = "h-72", compact = false }: { url: string; heightClassName?: string; compact?: boolean }) {
   return (
-    <div className="relative h-72 w-full overflow-hidden rounded-lg bg-gradient-to-b from-[var(--color-surface-2)] to-[var(--color-surface)]">
+    <div className={`relative w-full overflow-hidden rounded-lg bg-gradient-to-b from-[var(--color-surface-2)] to-[var(--color-surface)] ${heightClassName}`}>
       <Canvas key={url} shadows camera={{ position: [90, 70, 90], fov: 38 }}>
         <color attach="background" args={["#2d2c2a"]} />
         <ambientLight intensity={0.7} />
@@ -50,9 +50,11 @@ export function StlViewer({ url }: { url: string }) {
         </Suspense>
         <OrbitControls autoRotate autoRotateSpeed={1.1} enablePan={false} makeDefault />
       </Canvas>
-      <div className="pointer-events-none absolute bottom-2 left-2 rounded-md bg-black/40 px-2 py-1 text-[10px] text-[var(--color-text-muted)] backdrop-blur">
-        Vista previa generada por el motor de geometría · arrastra para rotar
-      </div>
+      {!compact && (
+        <div className="pointer-events-none absolute bottom-2 left-2 rounded-md bg-black/40 px-2 py-1 text-[10px] text-[var(--color-text-muted)] backdrop-blur">
+          Vista previa generada por el motor de geometría · arrastra para rotar
+        </div>
+      )}
     </div>
   );
 }

@@ -208,6 +208,31 @@ def test_cajera_con_herramienta_mas_grande_que_el_bolsillo_no_genera_movimiento_
     assert resultado.operaciones_solo_planeadas == 1
 
 
+def test_operacion_sin_movimiento_no_hace_cambio_de_herramienta_falso():
+    """A real rough edge found while testing against a client drawing: a
+    feature with nothing to cut still staged the machine for it anyway -
+    tool change, spindle start, coolant on/off around a cut that never
+    happens. A machinist reading the file would see the machine "get
+    ready" and then do nothing. This applies to escalon, cajera and
+    saliente alike whenever a whole operation ends up with zero real
+    movement - only the identifying comment and the reason should appear,
+    no M6/M3/M8/M9 wrapped around empty air.
+    """
+    pieza = Pieza(
+        pieza="placa",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="f1", tipo=TipoFeature.ESCALON, cara="lateral_frontal", ancho_mm=8, profundidad_mm=None)],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    assert "TRAYECTORIA NO GENERADA" in resultado.contenido
+    assert "M6" not in resultado.contenido
+    assert "M3 " not in resultado.contenido
+    assert "M8" not in resultado.contenido
+
+
 def test_ciclo_taladrado_no_se_cancela_entre_barrenos():
     """G0 between repeated positions would cancel the G81/G83 modal cycle
     (same modal group), turning holes 2..N into unmachined rapid moves."""

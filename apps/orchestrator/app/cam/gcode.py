@@ -135,16 +135,20 @@ def _recorrer_puntos_multi_pasada(pp: dict, op, puntos: list[Punto], z_top: floa
     return lineas
 
 
+def _encabezado_id(pp: dict, feature: Feature, op) -> str:
+    return _comentario(pp, f"{feature.tipo.value.upper()} id={feature.id or '?'} - {op.herramienta.descripcion} - {op.estrategia}")
+
+
 def _bloque_cajera(pp: dict, feature: Feature, op, tool_num: int) -> tuple[list[str], bool]:
     ancho = feature.ancho_mm or 10.0
     largo = feature.largo_mm or 10.0
-    lineas = _encabezado_operacion(pp, feature, op, tool_num)
+    cuerpo: list[str] = []
     hubo_movimiento = False
 
     for pos in feature.lista_posiciones():
         puntos = puntos_zigzag_rectangulo(pos.x, pos.y, largo, ancho, op.herramienta.diametro_mm)
         if puntos is None:
-            lineas.append(
+            cuerpo.append(
                 _comentario(
                     pp,
                     f"HERRAMIENTA {op.herramienta.diametro_mm}mm NO CABE en cajera {largo}x{ancho}mm en "
@@ -152,11 +156,20 @@ def _bloque_cajera(pp: dict, feature: Feature, op, tool_num: int) -> tuple[list[
                 )
             )
             continue
-        lineas.extend(_recorrer_puntos_multi_pasada(pp, op, puntos))
+        cuerpo.extend(_recorrer_puntos_multi_pasada(pp, op, puntos))
         hubo_movimiento = True
 
+    if not hubo_movimiento:
+        # No position machined at all - do not stage a tool change/spindle
+        # start/coolant-on around a cut that never happens (see _bloque_escalon's
+        # docstring on the same principle: a real machinist reading this file
+        # should never see the machine "get ready" for nothing).
+        return [_encabezado_id(pp, feature, op), *cuerpo], False
+
+    lineas = _encabezado_operacion(pp, feature, op, tool_num)
+    lineas.extend(cuerpo)
     lineas.extend(_pie_operacion(pp, op))
-    return lineas, hubo_movimiento
+    return lineas, True
 
 
 def _rectangulo_relieve_borde(feature: Feature, pieza: Pieza) -> tuple[float, float, float, float] | None:
@@ -181,7 +194,13 @@ def _rectangulo_relieve_borde(feature: Feature, pieza: Pieza) -> tuple[float, fl
 
 
 def _bloque_escalon(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int) -> tuple[list[str], bool]:
-    lineas = _encabezado_operacion(pp, feature, op, tool_num)
+    """A block with nothing to cut must not stage the machine for a cut -
+    no tool change, no spindle start, no coolant on/off around empty air.
+    Every early-return here is deliberately just the identifying comment
+    line plus the reason, exactly what _bloque_pendiente already does for
+    a fully-unsupported feature type - a real machinist reading this file
+    should never see the machine "get ready" for a cut that never happens.
+    """
     # Mirror app.geometry.builder's own refusal exactly: a relief with no
     # confirmed ancho/profundidad has no cut in the STEP/STL model, so it
     # must not get real G1 motion here either (rules.py's generic
@@ -189,31 +208,31 @@ def _bloque_escalon(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int)
     # hand this a depth STL/STEP never got - the model and the G-code
     # would disagree about whether the part was even cut here).
     if feature.ancho_mm is None or feature.profundidad_mm is None:
-        lineas.append(
-            _comentario(pp, f"ESCALON id={feature.id or '?'}: falta ancho_mm y/o profundidad_mm - TRAYECTORIA NO GENERADA (tampoco se modelo en el solido)")
-        )
-        lineas.extend(_pie_operacion(pp, op))
-        return lineas, False
+        return [
+            _encabezado_id(pp, feature, op),
+            _comentario(pp, "TRAYECTORIA NO GENERADA: falta ancho_mm y/o profundidad_mm (tampoco se modelo en el solido)"),
+        ], False
 
     rect = _rectangulo_relieve_borde(feature, pieza)
     if rect is None:
-        lineas.append(_comentario(pp, f"ESCALON id={feature.id or '?'}: cara '{feature.cara}' no reconocida - TRAYECTORIA NO GENERADA"))
-        lineas.extend(_pie_operacion(pp, op))
-        return lineas, False
+        return [
+            _encabezado_id(pp, feature, op),
+            _comentario(pp, f"TRAYECTORIA NO GENERADA: cara '{feature.cara}' no reconocida"),
+        ], False
 
     cx, cy, largo, ancho = rect
     puntos = puntos_zigzag_rectangulo(cx, cy, largo, ancho, op.herramienta.diametro_mm)
     if puntos is None:
-        lineas.append(
+        return [
+            _encabezado_id(pp, feature, op),
             _comentario(
                 pp,
-                f"HERRAMIENTA {op.herramienta.diametro_mm}mm NO CABE en el ancho del relieve "
-                f"({ancho}mm) en '{feature.cara}' - TRAYECTORIA NO GENERADA, requiere herramienta mas pequena",
-            )
-        )
-        lineas.extend(_pie_operacion(pp, op))
-        return lineas, False
+                f"TRAYECTORIA NO GENERADA: herramienta {op.herramienta.diametro_mm}mm no cabe en el ancho "
+                f"del relieve ({ancho}mm) en '{feature.cara}', requiere herramienta mas pequena",
+            ),
+        ], False
 
+    lineas = _encabezado_operacion(pp, feature, op, tool_num)
     lineas.extend(_recorrer_puntos_multi_pasada(pp, op, puntos))
     lineas.extend(_pie_operacion(pp, op))
     return lineas, True
@@ -249,7 +268,7 @@ def _bloque_saliente(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int
     height (raw stock starts that high) down to the base plate's normal
     top surface (z=0 in this program's convention) - see _pasadas_z.
     """
-    lineas = _encabezado_operacion(pp, feature, op, tool_num)
+    cuerpo: list[str] = []
     hubo_movimiento = False
     r_herr = op.herramienta.diametro_mm / 2
     altura_saliente = feature.profundidad_mm or 5.0
@@ -263,7 +282,7 @@ def _bloque_saliente(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int
         else:
             vertices = vertices_contorno_nominal_pieza(pieza)
             if vertices is None:
-                lineas.append(
+                cuerpo.append(
                     _comentario(pp, f"SALIENTE id={feature.id or '?'}: forma_base no soportada para calcular el limite exterior - TRAYECTORIA NO GENERADA")
                 )
                 continue
@@ -273,7 +292,7 @@ def _bloque_saliente(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int
         radio_exterior = radio_max - r_herr
         anillos = puntos_anillos_concentricos(pos.x, pos.y, radio_interior, radio_exterior, op.herramienta.diametro_mm)
         if not anillos:
-            lineas.append(
+            cuerpo.append(
                 _comentario(
                     pp,
                     f"SALIENTE id={feature.id or '?'}: sin espacio para carear alrededor con la herramienta "
@@ -283,11 +302,16 @@ def _bloque_saliente(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int
             continue
 
         for anillo in anillos:
-            lineas.extend(_recorrer_puntos_multi_pasada(pp, op, anillo, z_top=altura_saliente))
+            cuerpo.extend(_recorrer_puntos_multi_pasada(pp, op, anillo, z_top=altura_saliente))
         hubo_movimiento = True
 
+    if not hubo_movimiento:
+        return [_encabezado_id(pp, feature, op), *cuerpo], False
+
+    lineas = _encabezado_operacion(pp, feature, op, tool_num)
+    lineas.extend(cuerpo)
     lineas.extend(_pie_operacion(pp, op))
-    return lineas, hubo_movimiento
+    return lineas, True
 
 
 def _bloque_pendiente(pp: dict, feature: Feature, op) -> list[str]:

@@ -89,8 +89,13 @@ export function SimulacionEstandaloneView() {
         </p>
       </div>
 
-      <div className="mb-4 flex flex-wrap gap-2">
-        <input ref={inputModeloRef} type="file" accept=".stl" className="hidden" onChange={manejarModelo} />
+      <div className="mb-1.5 flex flex-wrap gap-2">
+        {/* No "accept" filter on either input on purpose - restricting it by
+            extension/MIME hid valid files in some browsers/OS file pickers
+            (same bug already found and fixed on the chat attachment picker).
+            Both files are validated by content/extension after picking
+            instead, in manejarModelo/manejarGcode below. */}
+        <input ref={inputModeloRef} type="file" className="hidden" onChange={manejarModelo} />
         <button
           onClick={() => inputModeloRef.current?.click()}
           className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-3)]"
@@ -108,6 +113,13 @@ export function SimulacionEstandaloneView() {
           {nombreGcode ?? "Subir código G"}
         </button>
       </div>
+      <p className="mb-4 max-w-2xl text-[11px] text-[var(--color-text-faint)]">
+        Modelo: el <strong className="text-[var(--color-text-muted)]">.STL</strong> que descargaste desde el mensaje del
+        modelo 3D en tu proyecto (junto al STEP). Código G: el archivo que descargaste al aprobar el proyecto - Axiscam
+        lo nombra con extensión <strong className="text-[var(--color-text-muted)]">.nc</strong> (la mayoría de las
+        máquinas) o <strong className="text-[var(--color-text-muted)]">.mpf</strong> (controles Siemens) - es texto
+        plano, ábrelo con cualquier editor de texto si no estás seguro de cuál archivo es.
+      </p>
 
       {errorLectura && <p className="mb-3 text-xs text-[var(--color-danger)]">{errorLectura}</p>}
 

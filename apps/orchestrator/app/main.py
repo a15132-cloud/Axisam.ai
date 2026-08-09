@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from app.api import routes_files, routes_kb, routes_projects
+from app.api import routes_convert, routes_files, routes_kb, routes_projects
 from app.config import settings
 from app.integrations import windows_bridge
 
@@ -25,6 +25,7 @@ app.add_middleware(
 app.include_router(routes_projects.router)
 app.include_router(routes_files.router)
 app.include_router(routes_kb.router)
+app.include_router(routes_convert.router)
 
 
 @app.get("/api/health")

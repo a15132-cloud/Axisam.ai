@@ -124,4 +124,28 @@ export const api = {
 
   materiales: () => unwrap<MaterialKB[]>(client.get("/knowledge-base/materiales")),
   postprocesadores: () => unwrap<PostprocesadorKB[]>(client.get("/knowledge-base/postprocesadores")),
+
+  convertirStepAStl: async (archivo: File): Promise<Blob> => {
+    const form = new FormData();
+    form.append("archivo", archivo);
+    try {
+      const res = await client.post("/convertir/step-a-stl", form, {
+        headers: { "Content-Type": "multipart/form-data" },
+        responseType: "blob",
+      });
+      return res.data as Blob;
+    } catch (err) {
+      const axiosErr = err as { response?: { data?: unknown; status?: number } };
+      let detalle: string | undefined;
+      if (axiosErr.response?.data instanceof Blob) {
+        try {
+          const texto = await axiosErr.response.data.text();
+          detalle = JSON.parse(texto)?.detail;
+        } catch {
+          /* not JSON - fall through to generic message */
+        }
+      }
+      throw new ApiError(detalle ?? "No se pudo convertir el archivo STEP a un modelo para vista previa.", axiosErr.response?.status);
+    }
+  },
 };

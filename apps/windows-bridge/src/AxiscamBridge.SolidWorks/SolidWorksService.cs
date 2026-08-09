@@ -210,25 +210,44 @@ public sealed class SolidWorksService : ISolidWorksService
         model.SketchManager.CreateCircleByRadius(xM, yM, 0, radioM);
         model.SketchManager.InsertSketch(true);
 
-        // FeatureCut4 mirrors FeatureExtrusion2's parameter shape with a
-        // few cut-specific flags appended (FlipSide, NormalCut, Optimize).
+        // FeatureCut4 takes 27 parameters, not the 25 an earlier draft of
+        // this method had - verified against a real, working macro example
+        // (thecadcoder.com's Create Extrude Cut Feature) after this file's
+        // original disclaimer flagged this exact call as unverified.
+        // FeatureCut4 shares FeatureExtrusion2's first 17 params (Sd..
+        // TranslateSurface2) then diverges: where Extrusion has just
+        // (Merge, UseFeatScope, UseAutoSelect) before T0, Cut has
+        // (NormalCut, UseFeatScope, UseAutoSelect, AssemblyFeatureScope,
+        // AutoSelectComponents, PropagateFeatureToParts) - three more, all
+        // assembly-scoping flags that don't apply to a single-body part
+        // like the ones this bridge creates, and a trailing
+        // OptimizeGeometry after FlipStartOffset that Extrusion doesn't
+        // have either. The previous 25-arg call was simply missing two of
+        // the assembly-scoping flags - which would have failed to compile
+        // against the real interop assembly (wrong argument count), not
+        // silently cut the wrong geometry.
         model.FeatureManager.FeatureCut4(
             true, false, true,
             (int)swEndConditions_e.swEndCondThroughAll, 0,
             0.0, 0.0,
             false, false, false, false, 0.0, 0.0,
             false, false, false, false,
-            true, false, false, true,
+            false, true, true, true, true, false,
             (int)swStartConditions_e.swStartSketchPlane, 0.0, false, false);
     }
 
-    // UNVERIFIED against a real SOLIDWORKS install, same caveat as the
-    // rest of this file (see top-of-file remarks): ActivateDoc3's exact
-    // parameter marshaling (ref vs out for Errors) can differ by
-    // SOLIDWORKS version's interop DLL. If this throws a
-    // MissingMethodException or argument-count COM error, that overload
-    // is the first thing to check against your installed version's API
-    // help - same debugging move as FeatureExtrusion2/FeatureCut4 above.
+    // Still not run against a real SOLIDWORKS install (no sandbox used to
+    // write this has one), but the `ref errors` marshaling below is now
+    // corroborated by a real, working C# example (cadbooster.com's
+    // "return values in the SOLIDWORKS API" article uses the identical
+    // `var errors = 0; ... ref errors` pattern against this exact method)
+    // rather than being a bare guess - stronger confidence than the rest
+    // of this file's COM calls, though still not a substitute for someone
+    // actually compiling this against a real install. If it does throw a
+    // MissingMethodException or argument-count COM error on your version,
+    // that overload is the first thing to check against your installed
+    // SOLIDWORKS's API help - same debugging move as FeatureExtrusion2/
+    // FeatureCut4 above.
     public Task<bool> ActivarUltimoModeloAsync(CancellationToken ct = default) =>
         Task.Run(() =>
         {

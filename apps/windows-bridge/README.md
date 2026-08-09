@@ -123,6 +123,19 @@ that method's exact overload (SOLIDWORKS has added
 `FeatureExtrusion3/4` etc. over the years without removing the old ones)
 is the first thing to check.
 
+Cross-checked every COM call in this file against real published
+SOLIDWORKS macro examples (not just API help pages, several of which
+wouldn't render for automated fetching) and found and fixed one genuine
+bug in the process: `FeatureCut4` (used for the through-hole barrenos)
+was called with 25 arguments where the real signature needs 27 - it was
+missing `AssemblyFeatureScope` and `AutoSelectComponents`. Against the
+real interop assembly this would have failed to compile outright (wrong
+argument count), not produced a wrong cut silently - still worth fixing
+before anyone hits it. `FeatureExtrusion2` (23 args) and `SaveAs`'s
+`ref errors, ref warnings` marshaling were both independently confirmed
+correct as originally written against real code examples, not just
+inferred from memory.
+
 The model is also no longer closed after generation, and
 `ActivarUltimoModeloAsync` (behind `/solidworks/activar`, "Ver en
 SolidWorks" in the chat) re-activates it and brings the SOLIDWORKS window

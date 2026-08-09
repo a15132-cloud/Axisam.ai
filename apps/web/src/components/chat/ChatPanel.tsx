@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion } from "framer-motion";
-import { Paperclip, Send } from "lucide-react";
+import { Paperclip, Send, X, FileText } from "lucide-react";
 import type { ChatEntry } from "../../lib/types";
 import { ChatMessage, type ChatMessageActions } from "./ChatMessage";
 import { AxiscamLogo } from "../logo/AxiscamLogo";
@@ -32,6 +32,7 @@ function TypingIndicator() {
 
 export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, enviando, subiendo, puedeChatear }: ChatPanelProps) {
   const [texto, setTexto] = useState("");
+  const [archivoPendiente, setArchivoPendiente] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -41,17 +42,24 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
 
   async function enviar() {
     const t = texto.trim();
-    if (!t) return;
+    if (!t && !archivoPendiente) return;
+    const archivo = archivoPendiente;
     setTexto("");
-    await onEnviarMensaje(t);
+    setArchivoPendiente(null);
+    if (archivo) {
+      await onSubirArchivo(archivo, t);
+    } else {
+      await onEnviarMensaje(t);
+    }
   }
 
-  async function manejarArchivo(e: React.ChangeEvent<HTMLInputElement>) {
+  function manejarArchivo(e: React.ChangeEvent<HTMLInputElement>) {
+    // Solo se selecciona aqui - no se sube nada todavia. La subida real
+    // pasa cuando el usuario le pica a enviar, igual que un mensaje de texto.
     const archivo = e.target.files?.[0];
     e.target.value = "";
     if (!archivo) return;
-    await onSubirArchivo(archivo, texto.trim());
-    setTexto("");
+    setArchivoPendiente(archivo);
   }
 
   return (
@@ -90,11 +98,26 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
             (confirmar, generar, aprobar) siguen funcionando desde las tarjetas de arriba.
           </p>
         )}
+        {archivoPendiente && (
+          <div className="mb-2 flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2">
+            <FileText className="h-4 w-4 shrink-0 text-[var(--color-accent)]" />
+            <span className="min-w-0 flex-1 truncate text-xs text-[var(--color-text)]">{archivoPendiente.name}</span>
+            <button
+              type="button"
+              onClick={() => setArchivoPendiente(null)}
+              className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md text-[var(--color-text-faint)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
+              title="Quitar archivo"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </div>
+        )}
         <div className="flex items-end gap-2 rounded-xl border border-[var(--color-border)] bg-[var(--color-surface-2)] p-2">
           <button
+            type="button"
             onClick={() => fileInputRef.current?.click()}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-text-muted)] hover:bg-[var(--color-surface-3)] hover:text-[var(--color-text)]"
-            title="Subir plano"
+            title="Adjuntar archivo"
             disabled={subiendo}
           >
             <Paperclip className="h-4 w-4" />
@@ -110,13 +133,14 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
               }
             }}
             rows={1}
-            placeholder="Escribe un mensaje o sube un archivo..."
+            placeholder={archivoPendiente ? "Agrega instrucciones (opcional) y pica enviar..." : "Escribe un mensaje o adjunta un archivo..."}
             className="max-h-32 flex-1 resize-none bg-transparent px-1 py-1.5 text-sm text-[var(--color-text)] outline-none placeholder:text-[var(--color-text-faint)]"
           />
           <motion.button
+            type="button"
             whileTap={{ scale: 0.9 }}
             onClick={enviar}
-            disabled={!texto.trim() || enviando}
+            disabled={(!texto.trim() && !archivoPendiente) || enviando || subiendo}
             className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-accent)] text-black disabled:opacity-40"
           >
             <Send className="h-4 w-4" />

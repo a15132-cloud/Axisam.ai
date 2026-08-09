@@ -149,28 +149,30 @@ function FilaProyecto({
         }`}
       >
         <span className={`h-1.5 w-1.5 shrink-0 rounded-full ${ETAPA_DOT[proyecto.etapa]}`} />
-        <span className="min-w-0 flex-1 truncate pr-12">{proyecto.nombre}</span>
+        <span className="min-w-0 flex-1 truncate pr-20">{proyecto.nombre}</span>
       </button>
-      <div className="absolute right-2 top-1/2 flex -translate-y-1/2 items-center gap-0.5">
+      <div className="absolute right-1 top-1/2 flex -translate-y-1/2 items-center">
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             setEditando(true);
           }}
-          className="rounded-md p-1.5 text-[var(--color-text-faint)] hover:text-[var(--color-text)]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--color-text-faint)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-text)]"
           title="Renombrar proyecto"
         >
-          <Pencil className="h-3.5 w-3.5" />
+          <Pencil className="h-4 w-4" />
         </button>
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             onEliminar();
           }}
-          className="rounded-md p-1.5 text-[var(--color-text-faint)] hover:text-[var(--color-danger)]"
+          className="flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-[var(--color-text-faint)] hover:bg-[var(--color-surface-2)] hover:text-[var(--color-danger)]"
           title="Eliminar proyecto"
         >
-          <Trash2 className="h-3.5 w-3.5" />
+          <Trash2 className="h-4 w-4" />
         </button>
       </div>
     </div>

@@ -42,6 +42,19 @@ def test_planear_operacion_material_no_validado_advierte():
     assert any("sin validar" in w for w in op.parametros.advertencias)
 
 
+def test_planear_operacion_saliente_recomienda_herramienta_real():
+    """A boss (saliente) is machined subtractively by facing the material
+    AROUND it down - real tool/speeds/feeds should come back, not the
+    "estrategia no definida" fallback a truly unknown feature type gets.
+    """
+    feature = Feature(tipo=TipoFeature.SALIENTE, diametro_mm=40.0, profundidad_mm=5.0)
+    op = rules.planear_operacion(feature, Material(nombre="Aluminio 6061"), espesor_pieza_mm=15.0)
+    assert "relieve" in op.estrategia.lower() or "isla" in op.estrategia.lower()
+    assert op.herramienta.diametro_mm > 0
+    assert op.parametros.rpm > 0
+    assert any("extension exacta del careado" in n for n in op.notas)
+
+
 def test_obtener_postprocesador_default_es_haas():
     pp = rules.obtener_postprocesador()
     assert pp["controlador"] == "haas"

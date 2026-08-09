@@ -30,6 +30,7 @@ class TipoFeature(str, Enum):
     REDONDEO = "redondeo"
     RANURA = "ranura"
     ESCALON = "escalon"
+    SALIENTE = "saliente"
 
 
 class FormaBase(str, Enum):
@@ -91,6 +92,8 @@ class Feature(BaseModel):
     def _validate_shape_params(self) -> "Feature":
         if self.tipo in (TipoFeature.BARRENO, TipoFeature.BARRENO_ROSCADO) and self.diametro_mm is None:
             raise ValueError(f"feature {self.tipo} requiere diametro_mm")
+        if self.tipo == TipoFeature.SALIENTE and self.diametro_mm is None:
+            raise ValueError("feature saliente requiere diametro_mm")
         return self
 
     def lista_posiciones(self) -> list[Posicion2D]:
@@ -118,6 +121,15 @@ class Dimensiones(BaseModel):
     longitud_mm: Optional[float] = Field(
         default=None, description="Para piezas de revolucion (torneado): longitud sobre el eje"
     )
+    puntos_perfil_mm: Optional[list[Posicion2D]] = Field(
+        default=None,
+        description=(
+            "Para forma_base=poligonal: contorno exterior cerrado como lista de puntos (x, y) en mm, "
+            "en orden (sentido horario o antihorario, cualquiera funciona), sin repetir el primer punto "
+            "al final. Cubre perfiles escalonados/con muescas que un rectangulo simple no puede - p.ej. "
+            "una placa con una pestaña que sobresale de un lado y una muesca del otro."
+        ),
+    )
 
     @model_validator(mode="after")
     def _validate_base_dims(self) -> "Dimensiones":
@@ -125,6 +137,8 @@ class Dimensiones(BaseModel):
             raise ValueError("forma_base=rectangular requiere largo_mm y ancho_mm")
         if self.forma_base == FormaBase.CIRCULAR and self.diametro_mm is None:
             raise ValueError("forma_base=circular requiere diametro_mm")
+        if self.forma_base == FormaBase.POLIGONAL and (self.puntos_perfil_mm is None or len(self.puntos_perfil_mm) < 3):
+            raise ValueError("forma_base=poligonal requiere puntos_perfil_mm con al menos 3 puntos")
         return self
 
 

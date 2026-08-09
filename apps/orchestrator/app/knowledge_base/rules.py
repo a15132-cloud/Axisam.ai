@@ -177,6 +177,7 @@ _ESTRATEGIA_POR_FEATURE: dict[TipoFeature, str] = {
     TipoFeature.REDONDEO: "Fresa de bola o chaflan segun radio, contorno de la arista",
     TipoFeature.RANURA: "Fresado de ranura en pasadas multiples (ancho > diametro fresa)",
     TipoFeature.ESCALON: "Fresado de escalon por niveles, desbaste + acabado",
+    TipoFeature.SALIENTE: "Careado/desbaste del area alrededor del saliente para dejarlo en relieve (pocket con isla)",
 }
 
 
@@ -217,6 +218,23 @@ def planear_operacion(feature: Feature, material: Material, espesor_pieza_mm: fl
         radio = feature.radio_mm or 3.0
         herramienta = seleccionar_fresa(radio * 2, tipo="fresas_bola_carburo")
         parametros = calcular_parametros_corte(info_material, herramienta.diametro_mm, herramienta.tipo, herramienta.flautas)
+    elif feature.tipo == TipoFeature.SALIENTE:
+        # A boss is machined subtractively too - by facing/roughing away
+        # the material AROUND it down to the lower level, leaving it
+        # standing proud (a "pocket with an island" operation). Tool
+        # sizing mirrors PERFIL_EXTERIOR's default since neither the
+        # clearance area nor the boss's own diameter alone determine a
+        # safe cutter size - the actual pocket boundary (how far out the
+        # facing extends) isn't in this schema yet, see notas below.
+        herramienta = seleccionar_fresa(min(espesor_pieza_mm * 2, 12.0))
+        parametros = calcular_parametros_corte(info_material, herramienta.diametro_mm, herramienta.tipo, herramienta.flautas)
+        notas.append(
+            "saliente: la extension exacta del careado alrededor del saliente (hasta donde se rebaja el "
+            "material circundante) no esta en el JSON extraido - se recomienda herramienta y parametros de "
+            "corte, pero la trayectoria XY real de esta operacion requiere definir esa extension primero "
+            "(revisar con el maquinista o completar en Mastercam), igual que un programador CAM humano "
+            "tendria que pedir esa cota si el plano no la da con claridad."
+        )
     else:  # PERFIL_EXTERIOR / default
         herramienta = seleccionar_fresa(min(espesor_pieza_mm * 2, 12.0))
         parametros = calcular_parametros_corte(info_material, herramienta.diametro_mm, herramienta.tipo, herramienta.flautas)

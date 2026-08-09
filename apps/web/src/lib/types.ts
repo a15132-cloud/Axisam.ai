@@ -12,7 +12,8 @@ export type TipoFeature =
   | "chaflan"
   | "redondeo"
   | "ranura"
-  | "escalon";
+  | "escalon"
+  | "saliente";
 
 export type FormaBase = "rectangular" | "circular" | "poligonal" | "revolucion";
 
@@ -54,6 +55,7 @@ export interface Dimensiones {
   diametro_mm?: number | null;
   espesor_mm: number;
   longitud_mm?: number | null;
+  puntos_perfil_mm?: Posicion2D[] | null;
 }
 
 export interface ToleranciaGeneral {

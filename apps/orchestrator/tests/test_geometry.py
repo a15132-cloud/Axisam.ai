@@ -59,9 +59,122 @@ def test_patron_incompleto_genera_advertencia():
 
 def test_forma_base_no_soportada_lanza_error():
     pieza = _placa_soporte()
-    pieza.dimensiones.forma_base = FormaBase.POLIGONAL
+    pieza.dimensiones.forma_base = FormaBase.REVOLUCION
     with pytest.raises(GeometryBuildError):
         build_pieza(pieza)
+
+
+def test_saliente_agrega_material_no_lo_quita():
+    """The whole point of `saliente` is being additive - a boss sticking
+    UP off the top face. If this ever regressed to behaving like a cut
+    (e.g. someone "simplifies" _agregar_saliente_cilindrico to .cut()),
+    both of these assertions would fail immediately.
+    """
+    base = Pieza(
+        pieza="placa_con_boss",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+    )
+    con_boss = Pieza(
+        pieza="placa_con_boss",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="boss", tipo=TipoFeature.SALIENTE, diametro_mm=30, profundidad_mm=6, posicion=Posicion2D(x=50, y=30))],
+    )
+
+    resultado_base = build_pieza(base)
+    resultado_boss = build_pieza(con_boss)
+    props_base = calcular_propiedades(resultado_base.solido)
+    props_boss = calcular_propiedades(resultado_boss.solido)
+
+    assert props_boss["volumen_mm3"] > props_base["volumen_mm3"]
+    assert props_boss["bbox_mm"]["z"] == pytest.approx(16.0, abs=0.01)  # 10mm base + 6mm boss height
+
+
+def test_saliente_con_barreno_pasante_perfora_el_boss_tambien():
+    """A through-hole at the same position as a boss must cut through the
+    ADDED boss material too, not just the original base thickness - this
+    is exactly the counterbore-like shape (raised boss + hole through the
+    middle) that came up on a real customer drawing. Regression test for
+    _cortar_barreno's bounding-box-based Z range (see its docstring) -
+    the old fixed-espesor range would leave the boss un-pierced.
+    """
+    pieza = Pieza(
+        pieza="placa_con_boss_taladrado",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="boss", tipo=TipoFeature.SALIENTE, diametro_mm=30, profundidad_mm=6, posicion=Posicion2D(x=50, y=30)),
+            Feature(id="hoyo", tipo=TipoFeature.BARRENO, diametro_mm=10, pasante=True, posicion=Posicion2D(x=50, y=30)),
+        ],
+    )
+
+    resultado = build_pieza(pieza)
+    props = calcular_propiedades(resultado.solido)
+
+    assert props["bbox_mm"]["z"] == pytest.approx(16.0, abs=0.01)  # boss still there, full height
+    # A cylindrical hole (r=5) through 16mm removes ~pi*5^2*16 ~= 1257mm3.
+    # If the hole only cut the original 10mm and left the boss solid on
+    # top, the removed volume would be ~pi*5^2*10 ~= 785mm3 instead -
+    # comparing against the boss-less baseline distinguishes the two.
+    base = Pieza(
+        pieza="placa_con_boss_taladrado",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="boss", tipo=TipoFeature.SALIENTE, diametro_mm=30, profundidad_mm=6, posicion=Posicion2D(x=50, y=30))],
+    )
+    props_sin_hoyo = calcular_propiedades(build_pieza(base).solido)
+    volumen_removido = props_sin_hoyo["volumen_mm3"] - props["volumen_mm3"]
+    assert volumen_removido == pytest.approx(1256.6, rel=0.02)
+
+
+def test_base_poligonal_construye_perfil_escalonado():
+    """An L-shaped outline (a rectangle with a corner notch) - the exact
+    shape of feature a plain rectangular/circular base can't produce,
+    which is what forma_base=poligonal exists for.
+    """
+    perfil = [
+        Posicion2D(x=0, y=0),
+        Posicion2D(x=100, y=0),
+        Posicion2D(x=100, y=40),
+        Posicion2D(x=60, y=40),
+        Posicion2D(x=60, y=60),
+        Posicion2D(x=0, y=60),
+    ]
+    pieza = Pieza(
+        pieza="placa_en_L",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.POLIGONAL, espesor_mm=10, puntos_perfil_mm=perfil),
+    )
+
+    resultado = build_pieza(pieza)
+    props = calcular_propiedades(resultado.solido)
+
+    assert props["bbox_mm"]["x"] == pytest.approx(100.0, abs=0.01)
+    assert props["bbox_mm"]["y"] == pytest.approx(60.0, abs=0.01)
+    # The full 100x60 bounding rectangle would be 6000mm2 of footprint;
+    # the L-shape (with a 40x20 corner notched out) is 6000 - 800 = 5200mm2.
+    assert props["volumen_mm3"] == pytest.approx(5200 * 10, rel=0.001)
+
+
+def test_base_poligonal_permite_redondeos_de_esquina():
+    perfil = [Posicion2D(x=0, y=0), Posicion2D(x=50, y=0), Posicion2D(x=50, y=30), Posicion2D(x=0, y=30)]
+    pieza = Pieza(
+        pieza="placa_poligonal_redondeada",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.POLIGONAL, espesor_mm=5, puntos_perfil_mm=perfil),
+        features=[Feature(id="r1", tipo=TipoFeature.REDONDEO, radio_mm=5)],
+    )
+
+    resultado = build_pieza(pieza)
+
+    assert resultado.features_omitidos == []
+    assert resultado.advertencias == []
+
+
+def test_dimensiones_poligonal_requiere_puntos_perfil():
+    with pytest.raises(Exception):
+        Dimensiones(forma_base=FormaBase.POLIGONAL, espesor_mm=5)
 
 
 def test_feature_no_soportado_se_omite_no_crashea():

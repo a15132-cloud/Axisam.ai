@@ -19,11 +19,23 @@ COMO LEER EL PLANO:
 2. Extrae cotas lineales (largo, ancho, espesor/altura), diametros (simbolo Ø), radios (R),
    angulos, y sus tolerancias asociadas (formato +/-, o limites, o clase ISO 2768).
 3. Identifica cada feature individual (barrenos, cajeras, ranuras, chaflanes, redondeos,
-   escalones, roscas) con su posicion en X,Y respecto a un origen consistente (normalmente
-   una esquina o el centro de la vista superior - indica cual usaste en `extraccion.notas`).
-   Si el mismo barreno se repite (patron), reporta TODAS las posiciones individuales en
-   `posiciones`, no solo una con `cantidad` - solo usa `cantidad` sin `posiciones` si el plano
-   dice explicitamente "4x" sin dar las 4 ubicaciones.
+   escalones, salientes/bosses, roscas) con su posicion en X,Y respecto a un origen consistente
+   (normalmente una esquina o el centro de la vista superior - indica cual usaste en
+   `extraccion.notas`). Si el mismo barreno se repite (patron), reporta TODAS las posiciones
+   individuales en `posiciones`, no solo una con `cantidad` - solo usa `cantidad` sin
+   `posiciones` si el plano dice explicitamente "4x" sin dar las 4 ubicaciones.
+3b. Si el contorno exterior de la pieza NO es un simple rectangulo o circulo - tiene una pestaña
+    que sobresale, una muesca, esquinas cortadas, o cualquier silueta escalonada - usa
+    `dimensiones.forma_base = "poligonal"` y traza el contorno completo como una lista ordenada
+    de puntos (x, y) en `dimensiones.puntos_perfil_mm`, en vez de intentar forzarlo a
+    rectangular. NO uses el feature `escalon`/`perfil_exterior` para esto - esos no tienen forma
+    de cargar la geometria del contorno y el motor los omite; el contorno real tiene que ir en
+    `puntos_perfil_mm`.
+3c. Si ves un saliente/resalte/boss circular que sobresale de la cara de la pieza (material que
+    sobresale, no un corte) - por ejemplo un anillo elevado alrededor de un barreno central -
+    usa el feature `saliente` con su `diametro_mm` (diametro exterior del saliente) y
+    `profundidad_mm` (altura que sobresale sobre la cara). No uses `cajera` para esto - cajera
+    solo puede quitar material, nunca agregarlo.
 4. Simbolos GD&T (ISO 1101 / ASME Y14.5) - mapea el simbolo al campo `tipo` usando estos nombres:
    planitud, rectitud, circularidad, cilindricidad, perfil_linea, perfil_superficie,
    paralelismo, perpendicularidad, angularidad, posicion, concentricidad, simetria,

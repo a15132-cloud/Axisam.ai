@@ -13,11 +13,14 @@ server is available, this module can be swapped for one that drives the
 COM API while keeping the exact same `build_pieza` -> STEP/STL contract.
 
 Deliberately unsupported (raise GeometryBuildError instead of guessing):
-- forma_base = poligonal / revolucion (no profile geometry in the schema)
+- forma_base = revolucion (no profile geometry in the schema)
 - pockets/slots on lateral_* faces (barrenos are supported there - see
   CARAS_LATERALES - but a rectangular cut needs a second in-plane axis
   convention this schema doesn't carry yet)
-- feature.tipo = escalon, perfil_exterior (need explicit boundary geometry)
+- feature.tipo = escalon (a "step" feature meant for adding one to an
+  otherwise-simple base; use forma_base=poligonal with puntos_perfil_mm
+  instead to describe the exact stepped/notched outline directly - see
+  Dimensiones.puntos_perfil_mm)
 Everything unsupported surfaces as a clear warning or error so a human
 catches it at the Capa 6 model-preview checkpoint - never modeled blindly.
 """
@@ -90,6 +93,18 @@ def _base_circular(diametro: float, espesor: float) -> cq.Workplane:
     return cq.Workplane("XY").circle(diametro / 2).extrude(espesor)
 
 
+def _base_poligonal(puntos: list[Posicion2D], espesor: float) -> cq.Workplane:
+    """Arbitrary closed outline, absolute (x, y) mm - same origin/axis
+    convention as everything else in this module (no centering). Covers
+    stepped/notched profiles a plain rectangle can't: a tab sticking out
+    on one edge, a notch cut into another, an L/T/U-shaped plate, etc -
+    just trace the real outline as a point list instead of needing a
+    dedicated shape primitive for every possible silhouette.
+    """
+    coords = [(p.x, p.y) for p in puntos]
+    return cq.Workplane("XY").polyline(coords).close().extrude(espesor)
+
+
 def _rango_z(feature: Feature, espesor: float) -> tuple[float, float]:
     """Returns (z_inicio_workplane, distancia_extrude) for the cutting tool."""
     if feature.pasante:
@@ -101,10 +116,40 @@ def _rango_z(feature: Feature, espesor: float) -> tuple[float, float]:
 
 
 def _cortar_barreno(solido: cq.Workplane, feature: Feature, pos: Posicion2D, espesor: float) -> cq.Workplane:
-    z0, dz = _rango_z(feature, espesor)
+    if feature.pasante:
+        # Use the solid's ACTUAL current height, not just the base
+        # espesor - if a saliente (boss) was added at this position
+        # before this cut runs (see build_pieza's saliente pre-pass),
+        # the base espesor alone would stop short of the boss's top and
+        # leave the through-hole not actually through. A cylinder that
+        # extends past real geometry into open air cuts nothing extra,
+        # so this is always safe, not just for the boss case.
+        bb = solido.val().BoundingBox()
+        z0, dz = bb.zmin - MARGEN_CORTE_MM, (bb.zmax - bb.zmin) + 2 * MARGEN_CORTE_MM
+    else:
+        z0, dz = _rango_z(feature, espesor)
     diametro = feature.diametro_mm or 5.0
     herramienta = _workplane_en(pos.x, pos.y, z0).circle(diametro / 2).extrude(dz)
     return solido.cut(herramienta)
+
+
+def _agregar_saliente_cilindrico(solido: cq.Workplane, feature: Feature, pos: Posicion2D, espesor: float) -> cq.Workplane:
+    """Additive boss/pad - material ADDED above (or below) the base
+    surface, e.g. a raised circular pad around a hole (a "boss"). This is
+    the complement of _cortar_barreno/_cortar_rectangulo, which only ever
+    remove material - CAJERA/RANURA/BARRENO can't produce a boss no
+    matter how they're parameterized, since cq's .cut() can only
+    subtract. Run these BEFORE any through-hole cuts at the same
+    position (see build_pieza) so a pasante hole correctly cuts through
+    the boss too, not just the base plate underneath it.
+    """
+    diametro = feature.diametro_mm or 10.0
+    altura = feature.profundidad_mm or 5.0
+    if feature.cara == "inferior":
+        pad = _workplane_en(pos.x, pos.y, 0.0).circle(diametro / 2).extrude(-altura)
+    else:
+        pad = _workplane_en(pos.x, pos.y, espesor).circle(diametro / 2).extrude(altura)
+    return solido.union(pad)
 
 
 def _cortar_barreno_lateral(
@@ -169,6 +214,8 @@ def build_pieza(pieza: Pieza) -> BuildResult:
         solido = _base_rectangular(dims.largo_mm, dims.ancho_mm, dims.espesor_mm)
     elif dims.forma_base == FormaBase.CIRCULAR:
         solido = _base_circular(dims.diametro_mm, dims.espesor_mm)
+    elif dims.forma_base == FormaBase.POLIGONAL:
+        solido = _base_poligonal(dims.puntos_perfil_mm, dims.espesor_mm)
     else:
         raise GeometryBuildError(
             f"forma_base='{dims.forma_base.value}' requiere geometria de perfil que no esta en el JSON "
@@ -176,15 +223,29 @@ def build_pieza(pieza: Pieza) -> BuildResult:
         )
 
     # Corner fillets/chamfers first (see docstring on why order matters).
+    # Works for poligonal bases too - "|Z" selects vertical edges of
+    # whatever prismatic solid exists so far, not specifically a rectangle.
+    bases_con_esquinas_rectas = (FormaBase.RECTANGULAR, FormaBase.POLIGONAL)
     corner_features = [f for f in pieza.features if f.tipo in (TipoFeature.REDONDEO, TipoFeature.CHAFLAN)]
-    if corner_features and dims.forma_base != FormaBase.RECTANGULAR:
+    if corner_features and dims.forma_base not in bases_con_esquinas_rectas:
         for f in corner_features:
-            omitidos.append(f"{f.tipo.value} (id={f.id or '?'}): solo soportado en piezas de base rectangular")
+            omitidos.append(f"{f.tipo.value} (id={f.id or '?'}): solo soportado en piezas de base rectangular o poligonal")
     elif corner_features:
         solido = _aplicar_redondeos_chaflanes(solido, corner_features, advertencias)
 
+    # Bosses/pads BEFORE any cutting feature: a pasante hole at the same
+    # position must cut through the boss too, which only works if the
+    # boss already exists when _cortar_barreno computes its Z range (see
+    # its docstring). Order in pieza.features shouldn't matter to the
+    # caller, so this is a dedicated pre-pass rather than relying on list order.
     for f in pieza.features:
-        if f.tipo in (TipoFeature.REDONDEO, TipoFeature.CHAFLAN):
+        if f.tipo != TipoFeature.SALIENTE:
+            continue
+        for pos in f.lista_posiciones():
+            solido = _agregar_saliente_cilindrico(solido, f, pos, dims.espesor_mm)
+
+    for f in pieza.features:
+        if f.tipo in (TipoFeature.REDONDEO, TipoFeature.CHAFLAN, TipoFeature.SALIENTE):
             continue  # already handled above
 
         if f.patron_incompleto:
@@ -240,8 +301,9 @@ def build_pieza(pieza: Pieza) -> BuildResult:
                 )
             elif f.tipo in (TipoFeature.ESCALON, TipoFeature.PERFIL_EXTERIOR):
                 omitidos.append(
-                    f"{f.tipo.value} (id={f.id or '?'}): requiere geometria de contorno que no esta en el "
-                    "JSON extraido - modelar manualmente en SolidWorks por ahora."
+                    f"{f.tipo.value} (id={f.id or '?'}): un feature aislado no puede describir un contorno "
+                    "escalonado/con muescas - usa forma_base=poligonal con puntos_perfil_mm en la pieza para "
+                    "trazar el contorno exterior real directamente, en vez de este feature."
                 )
             else:
                 omitidos.append(f"{f.tipo.value} (id={f.id or '?'}): tipo de feature no reconocido por el motor")

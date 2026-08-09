@@ -13,8 +13,12 @@ services:
     runtime: docker
     dockerfilePath: ./apps/orchestrator/Dockerfile
     dockerContext: ./apps/orchestrator
-    plan: free
+    plan: starter
     healthCheckPath: /api/health
+    disk:
+      name: axiscam-data
+      mountPath: /data
+      sizeGB: 1
     envVars:
       # Necesaria para que el chat y la lectura de planos funcionen. Es la
       # ÚNICA key que existe - tus clientes nunca ven ni configuran nada,
@@ -33,8 +37,14 @@ services:
       - key: AXISCAM_STORAGE_DIR
         value: /data
 
-# Nota honesta sobre almacenamiento: el plan "free" de Render NO soporta
-# discos persistentes - los planos/STEP/STL/G-code generados se pierden en
-# cada redeploy o reinicio del servicio (el mismo límite que ya aplicaba
-# con Railway/Fly en un plan gratuito). Para persistencia real, sube al
-# plan "Starter" o superior y agrega un bloque `disks:` montado en /data.
+# Nota honesta sobre almacenamiento: este blueprint ya pide un disco
+# persistente montado en /data (bloque `disk:` arriba), pero eso SOLO
+# funciona en el plan "Starter" o superior - por eso `plan: starter` en
+# vez de "free". El plan "free" de Render NO soporta discos persistentes:
+# con "free", los proyectos/planos/STEP/STL/G-code generados se pierden en
+# CADA redeploy y en cada reinicio por inactividad (~15 min sin uso), sin
+# excepción. Si tu servicio en Render sigue en el plan "free", tienes que
+# cambiarlo a "Starter" (o superior) manualmente en el dashboard de
+# Render - este archivo no puede cobrarte ni cambiarte el plan por su
+# cuenta, eso lo confirmas tú ahí. El costo exacto del plan Starter
+# puedes verlo en el dashboard de Render antes de confirmar el cambio.

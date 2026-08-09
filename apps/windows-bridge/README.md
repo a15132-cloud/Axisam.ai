@@ -100,7 +100,11 @@ expect the first time you point it at your own SOLIDWORKS/Mastercam:
 **`AxiscamBridge.Api`** - verified. Builds and runs in this sandbox;
 `/health`, `/solidworks/generar-modelo` (503 path), and
 `/mastercam/generar-codigo-g` (503 path) were exercised directly and
-behave as documented.
+behave as documented. `/solidworks/activar` and `/mastercam/abrir` (the
+"Ver en SolidWorks" / "Abrir en Mastercam" buttons in the chat) compile
+cleanly the same way, but only their unavailable/unreachable paths have
+actually been exercised here - see the two entries below for what's
+unverified in each.
 
 **`AxiscamBridge.SolidWorks`** - written with real confidence, **not yet
 run against real SOLIDWORKS**. No sandbox used to build this had
@@ -119,6 +123,19 @@ that method's exact overload (SOLIDWORKS has added
 `FeatureExtrusion3/4` etc. over the years without removing the old ones)
 is the first thing to check.
 
+The model is also no longer closed after generation, and
+`ActivarUltimoModeloAsync` (behind `/solidworks/activar`, "Ver en
+SolidWorks" in the chat) re-activates it and brings the SOLIDWORKS window
+to the front via `ActivateDoc3` + a Win32 `SetForegroundWindow` on the
+`SLDWORKS` process. **This method has never run against a real SOLIDWORKS
+install either** - `SolidWorksService.cs` isn't even compiled in this
+sandbox (see `AxiscamBridge.SolidWorks.csproj`: the whole file is excluded
+from the build tree when the interop DLLs aren't found), so this isn't
+"written with confidence" the way the rest of the class is, it's a first
+draft against documented API shape only. If `ActivateDoc3` throws on your
+version, same move as above: check its exact overload in your installed
+SOLIDWORKS's API help.
+
 **`AxiscamBridge.Mastercam`** - deliberately scoped to detection-only.
 Mastercam does not expose one stable, universally-documented external
 automation object the way SOLIDWORKS does (`SldWorks.Application`) -
@@ -135,6 +152,17 @@ G-code out" automation genuinely isn't implemented. Calling
 `generar-codigo-g` against a machine with Mastercam installed returns a
 clear 503 explaining exactly that, plus a pointer to import the STEP file
 manually in the meantime - never a fabricated response.
+
+`AbrirStepAsync` (behind `/mastercam/abrir`, "Abrir en Mastercam" in the
+chat) is real and does compile in this sandbox (unlike the SOLIDWORKS
+project, this one has no interop-DLL gate), but the specific move of
+passing the STEP path as `mastercam.exe`'s first argument to open it
+automatically is an assumption based on standard Windows GUI app
+convention, **not a confirmed Mastercam command-line contract for any
+version**. If it doesn't load the file, Mastercam still launches and the
+user imports the STEP manually - it never blocks or fails on that guess
+being wrong. This button intentionally does not imply Mastercam "did"
+anything, the way "Ver en SolidWorks" does.
 
 ### Completing the Mastercam connector
 

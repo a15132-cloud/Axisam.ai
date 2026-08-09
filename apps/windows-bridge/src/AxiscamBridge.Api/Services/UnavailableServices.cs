@@ -19,6 +19,8 @@ public sealed class UnavailableSolidWorksService : ISolidWorksService
 
     public Task<ModeloResultado> GenerarModeloAsync(Pieza pieza, CancellationToken ct = default) =>
         throw new InvalidOperationException($"SolidWorks no esta disponible en este equipo: {_razon}");
+
+    public Task<bool> ActivarUltimoModeloAsync(CancellationToken ct = default) => Task.FromResult(false);
 }
 
 public sealed class UnavailableMastercamService : IMastercamService
@@ -27,8 +29,12 @@ public sealed class UnavailableMastercamService : IMastercamService
     public UnavailableMastercamService(string razon) => _razon = razon;
 
     public bool EstaDisponible => false;
+    public bool EstaInstalado => false;
     public string? Version => null;
 
     public Task<CodigoGResultado> GenerarCodigoGAsync(Pieza pieza, TrayectoriaResultado plan, string postprocesador, CancellationToken ct = default) =>
+        throw new InvalidOperationException($"Mastercam no esta disponible en este equipo: {_razon}");
+
+    public Task<bool> AbrirStepAsync(string rutaStepAbsoluta, CancellationToken ct = default) =>
         throw new InvalidOperationException($"Mastercam no esta disponible en este equipo: {_razon}");
 }

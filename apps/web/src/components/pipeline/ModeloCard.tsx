@@ -1,10 +1,11 @@
-import { Check, Download } from "lucide-react";
+import { useState } from "react";
+import { Check, Download, ExternalLink } from "lucide-react";
 import { Button } from "../common/Button";
 import { WarningBanner } from "../common/WarningBanner";
 import { StlViewer } from "../viewer/StlViewer";
 import { ErrorBoundary } from "../system/ErrorBoundary";
 import type { ArchivoGenerado } from "../../lib/types";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 
 interface ModeloCardProps {
   proyectoId: string;
@@ -14,13 +15,53 @@ interface ModeloCardProps {
   readOnly?: boolean;
   onConfirmar?: () => void;
   confirming?: boolean;
+  bridgeConectado?: boolean;
+  mastercamInstalado?: boolean;
 }
 
-export function ModeloCard({ proyectoId, archivos, advertencias, featuresOmitidos, readOnly, onConfirmar, confirming }: ModeloCardProps) {
+export function ModeloCard({
+  proyectoId,
+  archivos,
+  advertencias,
+  featuresOmitidos,
+  readOnly,
+  onConfirmar,
+  confirming,
+  bridgeConectado,
+  mastercamInstalado,
+}: ModeloCardProps) {
   const stl = archivos.find((a) => a.tipo === "stl");
   const step = archivos.find((a) => a.tipo === "step");
 
   const esSimulacion = stl?.es_simulacion ?? step?.es_simulacion ?? true;
+
+  const [activandoSw, setActivandoSw] = useState(false);
+  const [abriendoMc, setAbriendoMc] = useState(false);
+  const [errorBridge, setErrorBridge] = useState<string | null>(null);
+
+  async function verEnSolidworks() {
+    setErrorBridge(null);
+    setActivandoSw(true);
+    try {
+      await api.activarSolidworks(proyectoId);
+    } catch (err) {
+      setErrorBridge(err instanceof ApiError ? err.message : "No se pudo activar SolidWorks.");
+    } finally {
+      setActivandoSw(false);
+    }
+  }
+
+  async function abrirEnMastercam() {
+    setErrorBridge(null);
+    setAbriendoMc(true);
+    try {
+      await api.abrirMastercam(proyectoId);
+    } catch (err) {
+      setErrorBridge(err instanceof ApiError ? err.message : "No se pudo abrir Mastercam.");
+    } finally {
+      setAbriendoMc(false);
+    }
+  }
 
   return (
     <div className="w-full rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] p-4">
@@ -59,7 +100,25 @@ export function ModeloCard({ proyectoId, archivos, advertencias, featuresOmitido
             </Button>
           </a>
         )}
+        {!esSimulacion && bridgeConectado && (
+          <Button variant="secondary" icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={verEnSolidworks} loading={activandoSw}>
+            Ver en SolidWorks
+          </Button>
+        )}
+        {step && bridgeConectado && mastercamInstalado && (
+          <Button
+            variant="ghost"
+            icon={<ExternalLink className="h-3.5 w-3.5" />}
+            onClick={abrirEnMastercam}
+            loading={abriendoMc}
+            title="Abre Mastercam y trata de cargar el STEP - Mastercam no genera nada automatico todavia, esto solo te ahorra importarlo a mano"
+          >
+            Abrir en Mastercam
+          </Button>
+        )}
       </div>
+
+      {errorBridge && <p className="mt-2 text-xs text-[var(--color-danger)]">{errorBridge}</p>}
 
       {featuresOmitidos.length > 0 && (
         <div className="mt-3">

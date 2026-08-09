@@ -268,6 +268,8 @@ export default function App() {
                   onRechazar: rechazar,
                   confirmandoExtraccion,
                   confirmandoModelo,
+                  bridgeConectado: !!bridgeWindows,
+                  mastercamInstalado: !!bridgeWindows?.mastercam_instalado,
                 }}
               />
             )}

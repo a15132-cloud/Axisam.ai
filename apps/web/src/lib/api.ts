@@ -104,6 +104,9 @@ export const api = {
   simularMaquinado: (id: string) =>
     unwrap<{ proyecto: Proyecto; simulacion: Proyecto["simulacion"] }>(client.post(`/projects/${id}/simular-maquinado`)),
 
+  activarSolidworks: (id: string) => unwrap<{ activado: boolean }>(client.post(`/projects/${id}/activar-solidworks`)),
+  abrirMastercam: (id: string) => unwrap<{ abierto: boolean }>(client.post(`/projects/${id}/abrir-mastercam`)),
+
   aprobarFinal: (id: string, aprobado_por: string) => unwrap<Proyecto>(client.post(`/projects/${id}/aprobar-final`, { aprobado_por })),
   rechazar: (id: string, motivo?: string) => unwrap<Proyecto>(client.post(`/projects/${id}/rechazar`, { motivo })),
 

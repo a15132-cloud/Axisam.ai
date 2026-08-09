@@ -39,6 +39,11 @@ public sealed class MastercamService : IMastercamService
     // G-code right now, and it can't yet. See class remarks.
     public bool EstaDisponible => false;
 
+    // Unlike EstaDisponible, this is genuinely true whenever mastercam.exe
+    // was found - it only gates AbrirStepAsync (launch the app, open a
+    // file), which needs nothing beyond the executable existing.
+    public bool EstaInstalado => _deteccion.encontrado;
+
     public string? Version => _deteccion.version;
 
     public Task<CodigoGResultado> GenerarCodigoGAsync(Pieza pieza, TrayectoriaResultado plan, string postprocesador, CancellationToken ct = default)
@@ -49,6 +54,33 @@ public sealed class MastercamService : IMastercamService
               "Importa el STEP generado manualmente en Mastercam por ahora."
             : "Mastercam no parece estar instalado en este equipo.";
         throw new NotSupportedException(mensaje);
+    }
+
+    // Best-effort only, and explicit about it: passing a file path as the
+    // first argument to open-on-launch is the near-universal Windows GUI
+    // app convention, but it is NOT confirmed against this specific
+    // Mastercam version's actual command-line contract (unlike the
+    // filesystem detection above, which needs no such assumption). If the
+    // file doesn't load automatically, launching still succeeds and the
+    // user imports the STEP manually from the button already offered
+    // above it in the chat - this never blocks on the guess being right.
+    public Task<bool> AbrirStepAsync(string rutaStepAbsoluta, CancellationToken ct = default)
+    {
+        if (!_deteccion.encontrado || _deteccion.exePath is null)
+            throw new InvalidOperationException("Mastercam no parece estar instalado en este equipo.");
+
+        try
+        {
+            Process.Start(new ProcessStartInfo(_deteccion.exePath, $"\"{rutaStepAbsoluta}\"") { UseShellExecute = true });
+            return Task.FromResult(true);
+        }
+        catch (Exception)
+        {
+            // Fall back to just launching Mastercam with no arguments -
+            // still real and useful even if the file-open guess was wrong.
+            Process.Start(new ProcessStartInfo(_deteccion.exePath) { UseShellExecute = true });
+            return Task.FromResult(true);
+        }
     }
 
     private static (bool, string?, string?) DetectarInstalacion()

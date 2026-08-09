@@ -18,6 +18,7 @@ from pydantic import BaseModel, Field
 from app.agent import approval
 from app.agent.orchestrator import ejecutar_turno
 from app.geometry.builder import GeometryBuildError
+from app.integrations import windows_bridge
 from app.schemas.piece import Pieza
 from app.schemas.project import Etapa, Proyecto
 from app.storage import files as storage
@@ -204,6 +205,50 @@ def generar_modelo_3d(project_id: str) -> dict:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     storage.guardar_proyecto(proyecto)
     return {"proyecto": proyecto, **resultado}
+
+
+@router.post("/{project_id}/activar-solidworks")
+def activar_solidworks(project_id: str) -> dict:
+    """Brings the real SOLIDWORKS document behind this model to the front
+    on the user's own machine, via the local bridge (see
+    app.integrations.windows_bridge). Only meaningful when the model was
+    actually built by real SOLIDWORKS - a simulated model has no
+    SolidWorks window to jump to.
+    """
+    proyecto = _obtener_o_404(project_id)
+    step = next((a for a in proyecto.archivos if a.tipo == "step"), None)
+    if step is None:
+        raise HTTPException(status_code=409, detail="Todavia no hay un modelo 3D generado para este proyecto.")
+    if step.es_simulacion:
+        raise HTTPException(
+            status_code=409,
+            detail="Este modelo se genero con el motor simulado, no con SolidWorks real - no hay ninguna ventana de SolidWorks a la que llevarte.",
+        )
+    try:
+        windows_bridge.activar_solidworks()
+    except windows_bridge.BridgeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"activado": True}
+
+
+@router.post("/{project_id}/abrir-mastercam")
+def abrir_mastercam(project_id: str) -> dict:
+    """Launches Mastercam on the user's own machine and best-effort opens
+    the generated STEP file, via the local bridge. Unlike
+    activar_solidworks, this works even for a simulated model - Mastercam
+    never automated anything either way, so this is just a shortcut to
+    "open the app with the file", available whenever a STEP exists.
+    """
+    proyecto = _obtener_o_404(project_id)
+    step = next((a for a in proyecto.archivos if a.tipo == "step"), None)
+    if step is None:
+        raise HTTPException(status_code=409, detail="Todavia no hay un archivo STEP generado para este proyecto.")
+    ruta_absoluta = storage.ruta_archivo_generado(project_id, step.nombre).resolve()
+    try:
+        windows_bridge.abrir_mastercam(str(ruta_absoluta))
+    except windows_bridge.BridgeError as exc:
+        raise HTTPException(status_code=502, detail=str(exc)) from exc
+    return {"abierto": True}
 
 
 @router.post("/{project_id}/confirmar-modelo")

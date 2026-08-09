@@ -55,6 +55,11 @@ public sealed class HealthResponse
     [JsonPropertyName("status")] public string Status { get; set; } = "ok";
     [JsonPropertyName("solidworks_disponible")] public bool SolidWorksDisponible { get; set; }
     [JsonPropertyName("mastercam_disponible")] public bool MastercamDisponible { get; set; }
+    // True whenever mastercam.exe was found, even though MastercamDisponible
+    // (full automation) is always false today - see MastercamService's
+    // class remarks. Lets the frontend offer "Abrir en Mastercam" (launch +
+    // best-effort open the file) without implying automation exists.
+    [JsonPropertyName("mastercam_instalado")] public bool MastercamInstalado { get; set; }
     [JsonPropertyName("version_solidworks")] public string? VersionSolidWorks { get; set; }
     [JsonPropertyName("version_mastercam")] public string? VersionMastercam { get; set; }
     [JsonPropertyName("detalle")] public string? Detalle { get; set; }

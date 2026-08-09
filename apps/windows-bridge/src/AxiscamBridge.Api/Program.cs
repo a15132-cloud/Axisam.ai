@@ -28,6 +28,7 @@ app.MapGet("/health", (ISolidWorksService sw, IMastercamService mc) => new Healt
     Status = "ok",
     SolidWorksDisponible = sw.EstaDisponible,
     MastercamDisponible = mc.EstaDisponible,
+    MastercamInstalado = mc.EstaInstalado,
     VersionSolidWorks = sw.Version,
     VersionMastercam = mc.Version,
     Detalle = "Axiscam Windows Bridge - conecta la app web con SolidWorks/Mastercam instalados localmente",
@@ -65,6 +66,40 @@ app.MapPost("/mastercam/generar-codigo-g", async (GenerarCodigoGRequest req, IMa
     }
 });
 
+app.MapPost("/solidworks/activar", async (ISolidWorksService sw) =>
+{
+    if (!sw.EstaDisponible)
+        return Results.Problem("SolidWorks no esta disponible en este equipo.", statusCode: 503);
+
+    try
+    {
+        var activado = await sw.ActivarUltimoModeloAsync();
+        return activado
+            ? Results.Ok(new ActivarResponse { Activado = true })
+            : Results.Problem("No hay ningun modelo generado en esta sesion del bridge todavia.", statusCode: 409);
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error activando el documento en SolidWorks: {ex.Message}", statusCode: 500);
+    }
+});
+
+app.MapPost("/mastercam/abrir", async (AbrirMastercamRequest req, IMastercamService mc) =>
+{
+    if (!mc.EstaInstalado)
+        return Results.Problem("Mastercam no parece estar instalado en este equipo.", statusCode: 503);
+
+    try
+    {
+        var abierto = await mc.AbrirStepAsync(req.RutaStepAbsoluta);
+        return Results.Ok(new ActivarResponse { Activado = abierto });
+    }
+    catch (Exception ex)
+    {
+        return Results.Problem($"Error abriendo Mastercam: {ex.Message}", statusCode: 500);
+    }
+});
+
 app.Run("http://127.0.0.1:5757");
 
 // Only listens on 127.0.0.1 (never 0.0.0.0) - this bridge drives licensed
@@ -77,4 +112,14 @@ public sealed class GenerarCodigoGRequest
     [JsonPropertyName("pieza")] public Pieza Pieza { get; set; } = new();
     [JsonPropertyName("plan")] public TrayectoriaResultado Plan { get; set; } = new();
     [JsonPropertyName("postprocesador")] public string Postprocesador { get; set; } = "haas_vf_generico";
+}
+
+public sealed class AbrirMastercamRequest
+{
+    [JsonPropertyName("ruta_step_absoluta")] public string RutaStepAbsoluta { get; set; } = "";
+}
+
+public sealed class ActivarResponse
+{
+    [JsonPropertyName("activado")] public bool Activado { get; set; }
 }

@@ -1,3 +1,4 @@
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using AxiscamBridge.Api.Contracts;
 using AxiscamBridge.Api.Services;
@@ -39,6 +40,7 @@ public sealed class SolidWorksService : ISolidWorksService
     private readonly ISldWorks _app;
     private readonly string _version;
     private readonly string _partTemplatePath;
+    private string? _ultimoTitulo;
 
     public SolidWorksService()
     {
@@ -158,8 +160,13 @@ public sealed class SolidWorksService : ISolidWorksService
         }
 
         var (stepBytes, stlBytes) = ExportarStepYStl(model, ext, pieza.NombrePieza);
-        var titulo = model.GetTitle();
-        _app.CloseDoc(titulo);
+        // Deliberately NOT calling _app.CloseDoc here anymore - the model
+        // stays open in SOLIDWORKS so "Ver en SolidWorks" in the chat (see
+        // ActivarUltimoModeloAsync) has an actual document to jump to.
+        // Tradeoff: documents accumulate as open tabs across a session on
+        // a local, single-user shop-floor install - acceptable, since the
+        // point of this button is showing the user the real thing it made.
+        _ultimoTitulo = model.GetTitle();
 
         return new ModeloResultado
         {
@@ -214,6 +221,47 @@ public sealed class SolidWorksService : ISolidWorksService
             true, false, false, true,
             (int)swStartConditions_e.swStartSketchPlane, 0.0, false, false);
     }
+
+    // UNVERIFIED against a real SOLIDWORKS install, same caveat as the
+    // rest of this file (see top-of-file remarks): ActivateDoc3's exact
+    // parameter marshaling (ref vs out for Errors) can differ by
+    // SOLIDWORKS version's interop DLL. If this throws a
+    // MissingMethodException or argument-count COM error, that overload
+    // is the first thing to check against your installed version's API
+    // help - same debugging move as FeatureExtrusion2/FeatureCut4 above.
+    public Task<bool> ActivarUltimoModeloAsync(CancellationToken ct = default) =>
+        Task.Run(() =>
+        {
+            if (_ultimoTitulo is null) return false;
+
+            int errors = 0;
+            var activado = _app.ActivateDoc3(_ultimoTitulo, false, (int)swRebuildOnActivation_e.swDontRebuildActiveDoc, ref errors);
+            if (activado is null) return false;
+
+            TraerVentanaAlFrente();
+            return true;
+        }, ct);
+
+    // ActivateDoc3 only changes which document SOLIDWORKS treats as
+    // active internally - it does not steal focus from whatever window
+    // the user is currently looking at (the browser, in this case). A
+    // plain Win32 SetForegroundWindow on the SOLIDWORKS process is the
+    // standard, version-independent way to actually bring it on screen.
+    private static void TraerVentanaAlFrente()
+    {
+        foreach (var proceso in Process.GetProcessesByName("SLDWORKS"))
+        {
+            if (proceso.MainWindowHandle != IntPtr.Zero)
+            {
+                SetForegroundWindow(proceso.MainWindowHandle);
+                break;
+            }
+        }
+    }
+
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetForegroundWindow(IntPtr hWnd);
 
     private static (byte[] step, byte[] stl) ExportarStepYStl(IModelDoc2 model, IModelDocExtension ext, string nombrePieza)
     {

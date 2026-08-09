@@ -224,6 +224,7 @@ export interface BridgeWindowsStatus {
   status: string;
   solidworks_disponible: boolean;
   mastercam_disponible: boolean;
+  mastercam_instalado?: boolean;
   version_solidworks?: string | null;
   version_mastercam?: string | null;
   detalle?: string | null;

@@ -198,9 +198,16 @@ cuenta (Perplexity, Notion AI, etc.) - no es una limitación particular de Axisc
 
 El plan gratuito de Render (igual que Railway/Fly en su plan gratis) no incluye disco
 persistente: los planos subidos y los archivos STEP/STL/G-code generados se pierden en cada
-redeploy o reinicio del servicio. Para producción real con datos persistentes, sube a un plan de
-pago y agrega un disco montado en `/data`, o migra ese almacenamiento a algo como S3 — ninguna de
-las dos era parte del alcance de esta fase.
+redeploy **y en cada reinicio por inactividad** (~15 min sin uso) del servicio - no es un caso
+raro, es el comportamiento normal del plan free. Si tu servicio en Render sigue en "free", vas a
+seguir perdiendo proyectos sin previo aviso, incluyendo a mitad de una demo.
+
+`render.yaml` ya trae listo un disco persistente montado en `/data` (bloque `disk:`) y
+`plan: starter` para que funcione - pero eso solo aplica cuando conectas/sincronizas el
+blueprint de nuevo, o si cambias el plan del servicio manualmente en el dashboard de Render
+(Settings del servicio → Plan). Este repo no puede cambiarte el plan ni cobrarte por su cuenta;
+eso lo confirmas tú directamente en Render, donde también puedes ver el costo exacto antes de
+aceptar.
 
 ## Limitaciones conocidas (para no sorprenderse)
 

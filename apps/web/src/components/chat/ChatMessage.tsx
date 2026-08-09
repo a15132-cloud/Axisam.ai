@@ -25,6 +25,8 @@ export interface ChatMessageActions {
   onRechazar: (motivo: string) => Promise<void>;
   confirmandoExtraccion: boolean;
   confirmandoModelo: boolean;
+  bridgeConectado: boolean;
+  mastercamInstalado: boolean;
 }
 
 export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: ChatMessageActions }) {
@@ -92,6 +94,8 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
             readOnly={entry.confirmado}
             confirming={actions.confirmandoModelo}
             onConfirmar={actions.onConfirmarModelo}
+            bridgeConectado={actions.bridgeConectado}
+            mastercamInstalado={actions.mastercamInstalado}
           />
         )}
 

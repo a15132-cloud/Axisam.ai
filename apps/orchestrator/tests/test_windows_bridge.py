@@ -117,3 +117,39 @@ def test_generar_codigo_g_mastercam_lanza_bridge_error_si_la_llamada_falla(monke
     plan = ToolpathPlan(estrategia="perfil_exterior")
     with pytest.raises(windows_bridge.BridgeError):
         windows_bridge.generar_codigo_g_mastercam(_pieza(), plan, "haas_vf_generico")
+
+
+# --- "Ver en SolidWorks" / "Abrir en Mastercam" (activar_solidworks / abrir_mastercam) ---
+# Unlike the generation functions, these always raise on any failure -
+# there's no "silently fall back to simulation" option that makes sense
+# for a button whose entire point is "show me the real thing".
+
+
+def test_activar_solidworks_lanza_si_bridge_no_alcanzable():
+    with pytest.raises(windows_bridge.BridgeError):
+        windows_bridge.activar_solidworks()
+
+
+def test_activar_solidworks_ok_cuando_bridge_confirma(monkeypatch):
+    monkeypatch.setattr(windows_bridge, "_post", lambda path, body: _FakeResponse(status_code=200, json_data={"activado": True}))
+    assert windows_bridge.activar_solidworks() is True
+
+
+def test_activar_solidworks_lanza_con_mensaje_del_bridge_si_falla(monkeypatch):
+    monkeypatch.setattr(
+        windows_bridge,
+        "_post",
+        lambda path, body: _FakeResponse(status_code=409, json_data={"detail": "No hay ningun modelo generado en esta sesion del bridge todavia."}),
+    )
+    with pytest.raises(windows_bridge.BridgeError, match="No hay ningun modelo"):
+        windows_bridge.activar_solidworks()
+
+
+def test_abrir_mastercam_lanza_si_bridge_no_alcanzable():
+    with pytest.raises(windows_bridge.BridgeError):
+        windows_bridge.abrir_mastercam("/data/projects/AXC-1/files/placa.step")
+
+
+def test_abrir_mastercam_ok_cuando_bridge_confirma(monkeypatch):
+    monkeypatch.setattr(windows_bridge, "_post", lambda path, body: _FakeResponse(status_code=200, json_data={"activado": True}))
+    assert windows_bridge.abrir_mastercam("/data/projects/AXC-1/files/placa.step") is True

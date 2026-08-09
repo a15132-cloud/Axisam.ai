@@ -116,3 +116,47 @@ def generar_codigo_g_mastercam(pieza: Pieza, plan: ToolpathPlan, postprocesador:
     if resp.is_error:
         raise BridgeError(f"El bridge de Windows respondio con error generando codigo G en Mastercam: {resp.text}")
     return resp.json()
+
+
+def _detalle_error(resp: httpx.Response) -> str:
+    """ASP.NET's Results.Problem(...) responds with a JSON body carrying a
+    "detail" field - prefer that human-readable message over the raw
+    response text, falling back to the text for anything that isn't JSON
+    shaped that way (e.g. a proxy/500 page from something other than the
+    bridge itself).
+    """
+    try:
+        detail = resp.json().get("detail")
+    except ValueError:
+        detail = None
+    return str(detail) if detail else resp.text
+
+
+def activar_solidworks() -> bool:
+    """Brings the most recently generated SOLIDWORKS document to the front.
+
+    Raises BridgeError for every failure mode - unreachable bridge, no
+    model generated this bridge session, SolidWorks not available - the
+    caller (routes_projects) turns that into one clear message for the
+    "Ver en SolidWorks" button. There is no silent-fallback case here like
+    the generation functions above: clicking that button only makes sense
+    when the user expects something real to happen.
+    """
+    resp = _post("/solidworks/activar", {})
+    if resp is None:
+        raise BridgeError("No se pudo contactar al bridge de Windows en este equipo.")
+    if resp.is_error:
+        raise BridgeError(_detalle_error(resp))
+    return True
+
+
+def abrir_mastercam(ruta_step_absoluta: str) -> bool:
+    """Launches Mastercam and best-effort opens the STEP file. Same
+    raise-on-any-failure contract as activar_solidworks - see there.
+    """
+    resp = _post("/mastercam/abrir", {"ruta_step_absoluta": ruta_step_absoluta})
+    if resp is None:
+        raise BridgeError("No se pudo contactar al bridge de Windows en este equipo.")
+    if resp.is_error:
+        raise BridgeError(_detalle_error(resp))
+    return True

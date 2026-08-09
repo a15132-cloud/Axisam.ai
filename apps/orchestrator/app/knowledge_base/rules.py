@@ -185,10 +185,21 @@ def seleccionar_estrategia(feature: Feature) -> str:
     return _ESTRATEGIA_POR_FEATURE.get(feature.tipo, "Estrategia no definida - revisar manualmente")
 
 
-def planear_operacion(feature: Feature, material: Material, espesor_pieza_mm: float) -> OperacionRecomendada:
+def planear_operacion(
+    feature: Feature, material: Material, espesor_pieza_mm: float, holgura_disponible_mm: float | None = None
+) -> OperacionRecomendada:
     """The core Capa 5 decision: for one feature, decide tool + cutting
     params + strategy. This is what generar_trayectoria_mastercam calls
     per feature.
+
+    `holgura_disponible_mm`: only meaningful for TipoFeature.saliente -
+    the real radial clearance between the boss and the actual part
+    boundary (computed by the caller via
+    app.cam.toolpath_geometry.radio_maximo_inscrito, which knows the
+    part's real outline; this module doesn't). Without it, boss tool
+    sizing falls back to the generic default, which can pick a tool too
+    big to fit a tight boss - same failure mode CAJERA/RANURA already
+    avoid by sizing from their own known dimensions.
     """
     info_material = buscar_material(material)
     estrategia = seleccionar_estrategia(feature)
@@ -221,20 +232,27 @@ def planear_operacion(feature: Feature, material: Material, espesor_pieza_mm: fl
     elif feature.tipo == TipoFeature.SALIENTE:
         # A boss is machined subtractively too - by facing/roughing away
         # the material AROUND it down to the lower level, leaving it
-        # standing proud (a "pocket with an island" operation). Tool
-        # sizing mirrors PERFIL_EXTERIOR's default since neither the
-        # clearance area nor the boss's own diameter alone determine a
-        # safe cutter size - the actual pocket boundary (how far out the
-        # facing extends) isn't in this schema yet, see notas below.
-        herramienta = seleccionar_fresa(min(espesor_pieza_mm * 2, 12.0))
+        # standing proud (a "pocket with an island" operation, see
+        # app.cam.gcode._bloque_saliente for the actual toolpath - it
+        # spreads outward from the boss up to the real part boundary,
+        # computed geometrically, not guessed). Tool must fit the ACTUAL
+        # radial clearance to that boundary or the toolpath generator
+        # will correctly refuse to fabricate a cut that doesn't fit,
+        # rather than force a leftover comment - size for that clearance
+        # when known, falling back to the generic default otherwise.
+        # A ring only fits if diametro < holgura_disponible_mm (tool radius
+        # on both the boss side and the boundary side must add up to less
+        # than the available radial band) - 0.7x leaves real margin rather
+        # than sizing right up to the theoretical limit.
+        diametro_max = min(holgura_disponible_mm * 0.7, 12.0) if holgura_disponible_mm else min(espesor_pieza_mm * 2, 12.0)
+        herramienta = seleccionar_fresa(diametro_max)
         parametros = calcular_parametros_corte(info_material, herramienta.diametro_mm, herramienta.tipo, herramienta.flautas)
-        notas.append(
-            "saliente: la extension exacta del careado alrededor del saliente (hasta donde se rebaja el "
-            "material circundante) no esta en el JSON extraido - se recomienda herramienta y parametros de "
-            "corte, pero la trayectoria XY real de esta operacion requiere definir esa extension primero "
-            "(revisar con el maquinista o completar en Mastercam), igual que un programador CAM humano "
-            "tendria que pedir esa cota si el plano no la da con claridad."
-        )
+        if holgura_disponible_mm is not None and herramienta.diametro_mm >= holgura_disponible_mm:
+            notas.append(
+                f"saliente: el espacio real alrededor del saliente ({holgura_disponible_mm:.1f}mm) es mas "
+                f"estrecho que lo que esta herramienta ({herramienta.diametro_mm}mm) necesita - revisar "
+                "manualmente, puede requerir una fresa mas pequena que la del catalogo estandar."
+            )
     else:  # PERFIL_EXTERIOR / default
         herramienta = seleccionar_fresa(min(espesor_pieza_mm * 2, 12.0))
         parametros = calcular_parametros_corte(info_material, herramienta.diametro_mm, herramienta.tipo, herramienta.flautas)

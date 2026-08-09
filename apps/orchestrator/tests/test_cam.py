@@ -1,3 +1,5 @@
+import math
+
 from app.cam.gcode import generar_codigo_g
 from app.cam.planner import planear_trayectoria
 from app.cam.simulate import simular_maquinado
@@ -48,6 +50,79 @@ def test_generar_codigo_g_barreno_y_cajera_ambos_con_movimiento_real():
     assert resultado.operaciones_con_movimiento_real == 2
     assert resultado.operaciones_solo_planeadas == 0
     assert "TRAYECTORIA NO GENERADA" not in resultado.contenido
+
+
+def test_barreno_pasante_a_traves_de_saliente_llega_a_la_profundidad_correcta():
+    """Regression test for a real bug found while testing against an
+    actual customer drawing: a through-hole was planned using just the
+    base plate espesor, coming up short wherever a boss (saliente) sat on
+    top of it - the drilled depth must clear the boss's added height too,
+    or the hole simply doesn't go all the way through the real part.
+    """
+    pieza = Pieza(
+        pieza="placa_con_boss",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="boss", tipo=TipoFeature.SALIENTE, diametro_mm=30, profundidad_mm=5, posicion=Posicion2D(x=50, y=30)),
+            Feature(id="hoyo", tipo=TipoFeature.BARRENO, diametro_mm=10, pasante=True, posicion=Posicion2D(x=50, y=30)),
+        ],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    assert "Z-15.000" in resultado.contenido  # 10mm base + 5mm boss, not just the base
+    assert "Z-10.000" not in resultado.contenido
+
+
+def test_barreno_lejos_del_saliente_no_se_ve_afectado():
+    """The fix above must be position-aware, not a blanket "always add the
+    tallest boss on the part" - a hole nowhere near any boss should still
+    use the plain base espesor.
+    """
+    pieza = Pieza(
+        pieza="placa_con_boss",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="boss", tipo=TipoFeature.SALIENTE, diametro_mm=30, profundidad_mm=5, posicion=Posicion2D(x=50, y=30)),
+            Feature(id="hoyo_lejano", tipo=TipoFeature.BARRENO, diametro_mm=6, pasante=True, posicion=Posicion2D(x=10, y=10)),
+        ],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    assert "Z-10.000" in resultado.contenido
+    assert "Z-15.000" not in resultado.contenido
+
+
+def test_saliente_genera_trayectoria_real_de_careado_alrededor():
+    """End-to-end: a boss on a rectangular plate must produce real G1
+    facing motion (not a "TRAYECTORIA NO GENERADA" placeholder), staying
+    within the part boundary and outside the boss itself.
+    """
+    pieza = Pieza(
+        pieza="placa_con_boss",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="boss", tipo=TipoFeature.SALIENTE, diametro_mm=20, profundidad_mm=5, posicion=Posicion2D(x=50, y=30))],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    assert resultado.operaciones_con_movimiento_real == 1
+    assert resultado.operaciones_solo_planeadas == 0
+    assert "TRAYECTORIA NO GENERADA" not in resultado.contenido
+
+    lineas = [l for l in resultado.contenido.splitlines() if l.startswith("G1 X")]
+    assert lineas, "se esperaba movimiento G1 real de careado"
+    radio_boss = 10.0
+    for linea in lineas:
+        x = float(linea.split("X")[1].split(" ")[0])
+        y = float(linea.split("Y")[1].split(" ")[0])
+        r = math.hypot(x - 50, y - 30)
+        assert r > radio_boss  # never cuts into the boss itself
+        assert 0.0 <= x <= 100.0 and 0.0 <= y <= 60.0  # stays on the real part
 
 
 def test_cajera_toolpath_se_mantiene_dentro_de_los_limites():

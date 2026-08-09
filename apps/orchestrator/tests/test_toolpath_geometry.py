@@ -1,9 +1,11 @@
 import math
 
 from app.cam.toolpath_geometry import (
+    puntos_anillos_concentricos,
     puntos_contorno_exterior_circulo,
     puntos_contorno_exterior_rectangulo,
     puntos_zigzag_rectangulo,
+    radio_maximo_inscrito,
 )
 
 
@@ -74,3 +76,48 @@ def test_contorno_exterior_circulo_radio_correcto():
     for x, y in puntos:
         assert math.isclose(math.hypot(x - 10, y - (-5)), 11, abs_tol=1e-6)
     assert puntos[0] == puntos[-1]
+
+
+def test_radio_maximo_inscrito_rectangulo_centrado():
+    # centered in a 100x60 rectangle: nearest edge is the short side, 30mm away
+    rect = [(0, 0), (100, 0), (100, 60), (0, 60)]
+    assert math.isclose(radio_maximo_inscrito(50, 30, rect), 30.0, abs_tol=1e-9)
+
+
+def test_radio_maximo_inscrito_punto_descentrado():
+    rect = [(0, 0), (100, 0), (100, 60), (0, 60)]
+    # 20mm from the left edge, 20mm from the bottom edge, both closer than the other two sides
+    assert math.isclose(radio_maximo_inscrito(20, 20, rect), 20.0, abs_tol=1e-9)
+
+
+def test_radio_maximo_inscrito_perfil_escalonado():
+    """Same 12-point stepped profile as the real PM-001 drawing (a tab
+    sticking up on top, a notch cut into the bottom) - the boss sits at
+    (60, 40). Straight up from the boss is actually still inside the tab
+    (open space, X 40-80 continues up to Y=80), so the nearest boundary
+    ISN'T the shoulder at Y=65 (32mm away, at the shoulder/tab corner) -
+    it's the bottom notch's top edge, exactly 30mm straight down
+    (40 - 10 = 30), the true minimum across all 12 edges.
+    """
+    perfil = [
+        (0, 0), (30, 0), (30, 10), (90, 10), (90, 0), (120, 0),
+        (120, 65), (80, 65), (80, 80), (40, 80), (40, 65), (0, 65),
+    ]
+    assert math.isclose(radio_maximo_inscrito(60, 40, perfil), 30.0, abs_tol=1e-9)
+
+
+def test_anillos_concentricos_se_quedan_en_el_anillo_pedido():
+    anillos = puntos_anillos_concentricos(cx=50, cy=30, radio_interior=10, radio_exterior=25, diametro_herramienta=8)
+    assert len(anillos) >= 2  # (25-10)/(8*0.6) ~= 3 rings
+    for anillo in anillos:
+        assert anillo[0] == anillo[-1]  # closed loop
+        for x, y in anillo:
+            r = math.hypot(x - 50, y - 30)
+            assert 10 - 1e-6 <= r <= 25 + 1e-6
+    # rings ordered smallest-first (cut outward from the boss, never back into cleared material)
+    radios = [math.hypot(anillo[0][0] - 50, anillo[0][1] - 30) for anillo in anillos]
+    assert radios == sorted(radios)
+
+
+def test_anillos_concentricos_sin_espacio_devuelve_vacio():
+    assert puntos_anillos_concentricos(cx=0, cy=0, radio_interior=20, radio_exterior=18, diametro_herramienta=8) == []

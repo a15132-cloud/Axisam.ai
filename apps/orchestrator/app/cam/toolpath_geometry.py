@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import math
 
+from app.schemas.piece import FormaBase, Pieza
+
 Punto = tuple[float, float]
 
 
@@ -90,3 +92,68 @@ def puntos_contorno_exterior_circulo(cx: float, cy: float, radio: float, offset:
     puntos = [(cx + r * math.cos(2 * math.pi * i / segmentos), cy + r * math.sin(2 * math.pi * i / segmentos)) for i in range(segmentos)]
     puntos.append(puntos[0])  # exact closure - recomputing cos/sin(2*pi) is not bit-identical to i=0
     return puntos
+
+
+def _distancia_punto_a_segmento(px: float, py: float, x1: float, y1: float, x2: float, y2: float) -> float:
+    dx, dy = x2 - x1, y2 - y1
+    if dx == 0 and dy == 0:
+        return math.hypot(px - x1, py - y1)
+    t = max(0.0, min(1.0, ((px - x1) * dx + (py - y1) * dy) / (dx * dx + dy * dy)))
+    return math.hypot(px - (x1 + t * dx), py - (y1 + t * dy))
+
+
+def radio_maximo_inscrito(cx: float, cy: float, vertices: list[Punto]) -> float:
+    """Largest circle centered at (cx, cy) that stays fully inside the
+    closed polygon `vertices` - the minimum distance from the center to
+    any edge. Correct whenever (cx, cy) is actually inside the polygon,
+    which is always true here (a boss/saliente center is inside the part
+    outline by construction). Used to find how far a facing operation can
+    spread around a boss WITHOUT cutting outside the real part boundary -
+    a defined, computed limit instead of an arbitrary guess at "how big
+    should the facing area be."
+    """
+    n = len(vertices)
+    return min(
+        _distancia_punto_a_segmento(cx, cy, vertices[i][0], vertices[i][1], vertices[(i + 1) % n][0], vertices[(i + 1) % n][1])
+        for i in range(n)
+    )
+
+
+def vertices_contorno_nominal_pieza(pieza: Pieza) -> list[Punto] | None:
+    """Raw (un-offset) boundary vertices of the part's own outline - used
+    to find how far a facing pass can spread before it would cut outside
+    the real part (see radio_maximo_inscrito), NOT to generate a
+    tool-center path directly (a real cutting path needs a tool-radius
+    offset inward from this). None for shapes not handled here (a boss on
+    a revolucion part isn't something this engine builds in the first
+    place, so this is a narrow, rarely-hit gap).
+    """
+    d = pieza.dimensiones
+    if d.forma_base == FormaBase.POLIGONAL and d.puntos_perfil_mm:
+        return [(p.x, p.y) for p in d.puntos_perfil_mm]
+    if d.forma_base == FormaBase.RECTANGULAR and d.largo_mm and d.ancho_mm:
+        return [(0.0, 0.0), (d.largo_mm, 0.0), (d.largo_mm, d.ancho_mm), (0.0, d.ancho_mm)]
+    return None
+
+
+def puntos_anillos_concentricos(
+    cx: float, cy: float, radio_interior: float, radio_exterior: float, diametro_herramienta: float, segmentos: int = 48
+) -> list[list[Punto]]:
+    """Concentric closed circular tool-center passes clearing the annular
+    area between radio_interior and radio_exterior (e.g. facing the
+    material around a boss to leave it standing proud). Returned smallest
+    ring first, so cutting proceeds outward from the boss - never
+    re-entering material already cleared at a larger radius after a
+    smaller one. Empty list if there's no room for even one pass.
+    """
+    if radio_exterior <= radio_interior:
+        return []
+    stepover = max(diametro_herramienta * 0.6, 0.1)
+    n_anillos = max(1, math.ceil((radio_exterior - radio_interior) / stepover))
+    radios = [radio_interior + i * (radio_exterior - radio_interior) / n_anillos for i in range(1, n_anillos + 1)]
+    anillos = []
+    for r in radios:
+        anillo = [(cx + r * math.cos(2 * math.pi * i / segmentos), cy + r * math.sin(2 * math.pi * i / segmentos)) for i in range(segmentos)]
+        anillo.append(anillo[0])
+        anillos.append(anillo)
+    return anillos

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Upload, Play, Pause, RotateCcw, FileCode, Box, Loader2 } from "lucide-react";
+import { Upload, Play, Pause, RotateCcw, FileCode, Box, Loader2, X } from "lucide-react";
 import { ToolpathViewer } from "./ToolpathViewer";
 import { parsearGCode, type ResultadoParseoGCode } from "../../lib/gcodeParser";
 import { ErrorBoundary } from "../system/ErrorBoundary";
@@ -97,6 +97,20 @@ export function SimulacionEstandaloneView() {
     progresoRef.current = 0;
   }
 
+  function quitarModelo() {
+    if (stlUrl) URL.revokeObjectURL(stlUrl);
+    setStlUrl(null);
+    setNombreModelo(null);
+    setErrorLectura(null);
+  }
+
+  function quitarGcode() {
+    setResultado(null);
+    setNombreGcode(null);
+    setErrorLectura(null);
+    reiniciar();
+  }
+
   const longitudTotal =
     resultado?.segmentos.reduce((acc, s) => acc + Math.hypot(s.hasta[0] - s.desde[0], s.hasta[1] - s.desde[1], s.hasta[2] - s.desde[2]), 0) ?? 0;
 
@@ -121,23 +135,45 @@ export function SimulacionEstandaloneView() {
             Both files are validated by content/extension after picking
             instead, in manejarModelo/manejarGcode below. */}
         <input ref={inputModeloRef} type="file" className="hidden" onChange={manejarModelo} disabled={convirtiendoStep} />
-        <button
-          onClick={() => inputModeloRef.current?.click()}
-          disabled={convirtiendoStep}
-          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-3)] disabled:opacity-60"
-        >
-          {convirtiendoStep ? <Loader2 className="h-4 w-4 animate-spin text-[var(--color-accent)]" /> : <Box className="h-4 w-4 text-[var(--color-accent)]" />}
-          {convirtiendoStep ? "Convirtiendo STEP…" : (nombreModelo ?? "Subir modelo (.STL o .STEP)")}
-        </button>
+        <div className="flex items-center overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]">
+          <button
+            onClick={() => inputModeloRef.current?.click()}
+            disabled={convirtiendoStep}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-3)] disabled:opacity-60"
+          >
+            {convirtiendoStep ? <Loader2 className="h-4 w-4 animate-spin text-[var(--color-accent)]" /> : <Box className="h-4 w-4 text-[var(--color-accent)]" />}
+            {convirtiendoStep ? "Convirtiendo STEP…" : (nombreModelo ?? "Subir modelo (.STL o .STEP)")}
+          </button>
+          {nombreModelo && !convirtiendoStep && (
+            <button
+              onClick={quitarModelo}
+              className="flex h-full items-center border-l border-[var(--color-border)] px-2 py-2 text-[var(--color-text-faint)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)]"
+              title="Quitar modelo"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
 
         <input ref={inputGcodeRef} type="file" className="hidden" onChange={manejarGcode} />
-        <button
-          onClick={() => inputGcodeRef.current?.click()}
-          className="flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)] px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-3)]"
-        >
-          <FileCode className="h-4 w-4 text-[var(--color-accent)]" />
-          {nombreGcode ?? "Subir código G"}
-        </button>
+        <div className="flex items-center overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-2)]">
+          <button
+            onClick={() => inputGcodeRef.current?.click()}
+            className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--color-text)] hover:bg-[var(--color-surface-3)]"
+          >
+            <FileCode className="h-4 w-4 text-[var(--color-accent)]" />
+            {nombreGcode ?? "Subir código G"}
+          </button>
+          {nombreGcode && (
+            <button
+              onClick={quitarGcode}
+              className="flex h-full items-center border-l border-[var(--color-border)] px-2 py-2 text-[var(--color-text-faint)] hover:bg-[var(--color-danger)]/10 hover:text-[var(--color-danger)]"
+              title="Quitar código G"
+            >
+              <X className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
       <p className="mb-4 max-w-2xl text-[11px] text-[var(--color-text-faint)]">
         Modelo: el <strong className="text-[var(--color-text-muted)]">.STEP</strong> (el mismo que usan SolidWorks y

@@ -17,12 +17,67 @@ from __future__ import annotations
 import math
 from dataclasses import dataclass, field
 
+from app.cam.toolpath_geometry import radio_maximo_inscrito, vertices_contorno_nominal_pieza
 from app.knowledge_base import rules
-from app.schemas.piece import Feature, Pieza
+from app.schemas.piece import Feature, FormaBase, Pieza, TipoFeature
 from app.schemas.project import ToolpathPlan
 
 TIEMPO_CAMBIO_HERRAMIENTA_MIN = 0.5
 TIEMPO_POSICIONAMIENTO_MIN = 0.15
+
+
+def _espesor_efectivo(pieza: Pieza, feature: Feature) -> float:
+    """Base plate thickness, plus the tallest saliente (boss) whose
+    footprint covers any of this feature's positions.
+
+    Why this matters: a pasante (through) hole planned with just the base
+    espesor would come up short wherever a boss sits on top of it - the
+    hole needs to clear the boss's added height too, not just the plate
+    underneath. This is the CAM-planning side of the identical fix
+    already applied on the geometry-model side (see
+    app/geometry/builder.py's _cortar_barreno, which uses the solid's
+    real bounding box instead of the base espesor for the same reason -
+    two independent representations of the same part, so both needed
+    their own fix).
+    """
+    if feature.tipo == TipoFeature.SALIENTE:
+        return pieza.dimensiones.espesor_mm  # the boss's own height is its profundidad_mm, not this
+    extra = 0.0
+    for otro in pieza.features:
+        if otro.tipo != TipoFeature.SALIENTE:
+            continue
+        radio_boss = (otro.diametro_mm or 10.0) / 2
+        altura_boss = otro.profundidad_mm or 5.0
+        for pos_boss in otro.lista_posiciones():
+            for pos in feature.lista_posiciones():
+                if math.hypot(pos.x - pos_boss.x, pos.y - pos_boss.y) <= radio_boss:
+                    extra = max(extra, altura_boss)
+    return pieza.dimensiones.espesor_mm + extra
+
+
+def _holgura_disponible_saliente(pieza: Pieza, feature: Feature) -> float | None:
+    """Real radial clearance between a saliente (boss) and the part's
+    actual boundary - the same geometry app.cam.gcode._bloque_saliente
+    uses to bound the facing toolpath, computed here too so the tool
+    selected in Capa 5 actually fits before the toolpath generator has to
+    reject it. None when the shape isn't one this can compute for
+    (matches gcode.py's own fallback).
+    """
+    if feature.tipo != TipoFeature.SALIENTE:
+        return None
+    d = pieza.dimensiones
+    holguras = []
+    for pos in feature.lista_posiciones():
+        radio_boss = (feature.diametro_mm or 10.0) / 2
+        if d.forma_base == FormaBase.CIRCULAR and d.diametro_mm:
+            radio_max = d.diametro_mm / 2 - math.hypot(pos.x, pos.y)
+        else:
+            vertices = vertices_contorno_nominal_pieza(pieza)
+            if vertices is None:
+                return None
+            radio_max = radio_maximo_inscrito(pos.x, pos.y, vertices)
+        holguras.append(radio_max - radio_boss)
+    return min(holguras) if holguras else None
 
 
 @dataclass
@@ -48,7 +103,9 @@ def planear_trayectoria(pieza: Pieza, postprocesador: str | None = None) -> Plan
 
     for feature in pieza.features:
         try:
-            op = rules.planear_operacion(feature, pieza.material, pieza.dimensiones.espesor_mm)
+            op = rules.planear_operacion(
+                feature, pieza.material, _espesor_efectivo(pieza, feature), _holgura_disponible_saliente(pieza, feature)
+            )
         except rules.MaterialNoEncontrado as exc:
             advertencias.append(str(exc))
             continue

@@ -52,7 +52,19 @@ def test_planear_operacion_saliente_recomienda_herramienta_real():
     assert "relieve" in op.estrategia.lower() or "isla" in op.estrategia.lower()
     assert op.herramienta.diametro_mm > 0
     assert op.parametros.rpm > 0
-    assert any("extension exacta del careado" in n for n in op.notas)
+
+
+def test_planear_operacion_saliente_usa_holgura_real_para_el_tamano_de_herramienta():
+    feature = Feature(tipo=TipoFeature.SALIENTE, diametro_mm=40.0, profundidad_mm=5.0)
+    op_amplio = rules.planear_operacion(feature, Material(nombre="Aluminio 6061"), espesor_pieza_mm=15.0, holgura_disponible_mm=20.0)
+    op_estrecho = rules.planear_operacion(feature, Material(nombre="Aluminio 6061"), espesor_pieza_mm=15.0, holgura_disponible_mm=3.0)
+    assert op_estrecho.herramienta.diametro_mm < op_amplio.herramienta.diametro_mm
+
+
+def test_planear_operacion_saliente_advierte_si_ni_la_herramienta_mas_chica_cabe():
+    feature = Feature(tipo=TipoFeature.SALIENTE, diametro_mm=40.0, profundidad_mm=5.0)
+    op = rules.planear_operacion(feature, Material(nombre="Aluminio 6061"), espesor_pieza_mm=15.0, holgura_disponible_mm=0.5)
+    assert any("espacio real alrededor" in n for n in op.notas)
 
 
 def test_obtener_postprocesador_default_es_haas():

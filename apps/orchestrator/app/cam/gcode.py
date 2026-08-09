@@ -27,9 +27,12 @@ from datetime import datetime, timezone
 from app.cam.planner import PlanDetallado
 from app.cam.toolpath_geometry import (
     Punto,
+    puntos_anillos_concentricos,
     puntos_contorno_exterior_circulo,
     puntos_contorno_exterior_rectangulo,
     puntos_zigzag_rectangulo,
+    radio_maximo_inscrito,
+    vertices_contorno_nominal_pieza,
 )
 from app.schemas.piece import Feature, FormaBase, Pieza, TipoFeature
 
@@ -100,21 +103,27 @@ def _bloque_taladrado(pp: dict, feature: Feature, op, espesor_pieza: float, tool
     return lineas
 
 
-def _pasadas_z(profundidad_pasada: float, profundidad_total: float) -> list[float]:
-    """Negative Z target for each roughing pass, deepest last, clipped to
-    the total requested depth (the last pass is often shallower than a
-    full step)."""
+def _pasadas_z(profundidad_pasada: float, profundidad_total: float, z_top: float = 0.0) -> list[float]:
+    """Z target for each roughing pass, deepest last, clipped to the total
+    requested depth (the last pass is often shallower than a full step).
+    `z_top` is the Z of the top of stock for THIS operation relative to
+    the part's normal Z=0 reference (its own top face) - 0.0 for every
+    feature that starts cutting from the part's real top surface (the
+    overwhelming majority), but nonzero for saliente/boss facing, where
+    the surrounding material starts higher, at the boss's own height
+    above the base plate (see _bloque_saliente).
+    """
     n = max(1, math.ceil(profundidad_total / profundidad_pasada))
-    return [-min(profundidad_pasada * (i + 1), profundidad_total) for i in range(n)]
+    return [z_top - min(profundidad_pasada * (i + 1), profundidad_total) for i in range(n)]
 
 
-def _recorrer_puntos_multi_pasada(pp: dict, op, puntos: list[Punto]) -> list[str]:
+def _recorrer_puntos_multi_pasada(pp: dict, op, puntos: list[Punto], z_top: float = 0.0) -> list[str]:
     lineas = []
     profundidad_total = op.profundidad_total_mm or op.profundidad_pasada_mm or 1.0
     profundidad_pasada = op.profundidad_pasada_mm or profundidad_total
     lineas.append(f"G0 X{puntos[0][0]:.3f} Y{puntos[0][1]:.3f}")
     lineas.append(f"G0 Z{pp['plano_seguridad_mm']:.3f}")
-    zetas = _pasadas_z(profundidad_pasada, profundidad_total)
+    zetas = _pasadas_z(profundidad_pasada, profundidad_total, z_top)
     for i, z in enumerate(zetas):
         lineas.append(f"G1 Z{z:.3f} F{op.parametros.avance_mm_min * FEED_PLUNGE_FRACCION:.1f}")
         for x, y in puntos[1:]:
@@ -169,6 +178,57 @@ def _bloque_contorno(pp: dict, feature: Feature, op, pieza: Pieza, offset: float
     return lineas, True
 
 
+def _bloque_saliente(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int) -> tuple[list[str], bool]:
+    """Facing/roughing the material AROUND a boss to leave it standing
+    proud - the real, standard subtractive technique for this feature
+    (see rules.py's planear_operacion). The facing spreads outward from
+    the boss up to the largest circle that stays inside the REAL part
+    boundary (radio_maximo_inscrito) - a computed limit from the actual
+    geometry, not a guessed pocket size. Cuts from z_top = the boss's own
+    height (raw stock starts that high) down to the base plate's normal
+    top surface (z=0 in this program's convention) - see _pasadas_z.
+    """
+    lineas = _encabezado_operacion(pp, feature, op, tool_num)
+    hubo_movimiento = False
+    r_herr = op.herramienta.diametro_mm / 2
+    altura_saliente = feature.profundidad_mm or 5.0
+
+    for pos in feature.lista_posiciones():
+        radio_boss = (feature.diametro_mm or 10.0) / 2
+
+        d = pieza.dimensiones
+        if d.forma_base == FormaBase.CIRCULAR and d.diametro_mm:
+            radio_max = d.diametro_mm / 2 - math.hypot(pos.x, pos.y)
+        else:
+            vertices = vertices_contorno_nominal_pieza(pieza)
+            if vertices is None:
+                lineas.append(
+                    _comentario(pp, f"SALIENTE id={feature.id or '?'}: forma_base no soportada para calcular el limite exterior - TRAYECTORIA NO GENERADA")
+                )
+                continue
+            radio_max = radio_maximo_inscrito(pos.x, pos.y, vertices)
+
+        radio_interior = radio_boss + r_herr
+        radio_exterior = radio_max - r_herr
+        anillos = puntos_anillos_concentricos(pos.x, pos.y, radio_interior, radio_exterior, op.herramienta.diametro_mm)
+        if not anillos:
+            lineas.append(
+                _comentario(
+                    pp,
+                    f"SALIENTE id={feature.id or '?'}: sin espacio para carear alrededor con la herramienta "
+                    f"{op.herramienta.diametro_mm}mm sin salirse de la pieza - TRAYECTORIA NO GENERADA, revisar manualmente",
+                )
+            )
+            continue
+
+        for anillo in anillos:
+            lineas.extend(_recorrer_puntos_multi_pasada(pp, op, anillo, z_top=altura_saliente))
+        hubo_movimiento = True
+
+    lineas.extend(_pie_operacion(pp, op))
+    return lineas, hubo_movimiento
+
+
 def _bloque_pendiente(pp: dict, feature: Feature, op) -> list[str]:
     return [
         _comentario(
@@ -207,6 +267,11 @@ def generar_codigo_g(pieza: Pieza, plan: PlanDetallado, numero_programa: int = 1
             con_movimiento += 1
         elif feature.tipo in FEATURES_CON_CAJERA:
             bloque, hubo_movimiento = _bloque_cajera(pp, feature, op, tool_num)
+            lineas.extend(bloque)
+            con_movimiento += 1 if hubo_movimiento else 0
+            sin_movimiento += 0 if hubo_movimiento else 1
+        elif feature.tipo == TipoFeature.SALIENTE:
+            bloque, hubo_movimiento = _bloque_saliente(pp, feature, op, pieza, tool_num)
             lineas.extend(bloque)
             con_movimiento += 1 if hubo_movimiento else 0
             sin_movimiento += 0 if hubo_movimiento else 1

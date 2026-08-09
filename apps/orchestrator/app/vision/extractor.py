@@ -18,9 +18,10 @@ from pydantic import ValidationError
 from app.config import settings
 from app.schemas.piece import Pieza
 from app.vision.dxf_reader import DXFLecturaError, resumen_textual_dxf
-from app.vision.prompts import SYSTEM_PROMPT
+from app.vision.prompts import SYSTEM_PROMPT, VERIFICATION_SYSTEM_PROMPT
 
 TOOL_NAME = "registrar_pieza_extraida"
+TOOL_DESCRIPTION = "Registra en formato estructurado la pieza extraida del plano de ingenieria."
 
 MEDIA_TYPES_IMAGEN = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
 
@@ -88,42 +89,10 @@ def _build_content_blocks(contenido: bytes, media_type: str, nombre_archivo: str
     )
 
 
-def extraer_pieza_desde_plano(
-    contenido: bytes,
-    media_type: str,
-    nombre_archivo: str,
-    instrucciones_usuario: str | None = None,
-    client: anthropic.Anthropic | None = None,
+def _llamar_registrar_pieza(
+    active_client: anthropic.Anthropic, system_prompt: str, content_blocks: list[dict]
 ) -> ResultadoExtraccion:
-    if not settings.anthropic_api_key and client is None:
-        # RuntimeError, not ExtraccionError: this is an operator/deployment
-        # misconfiguration (see app/api/routes_projects.py), not something
-        # about the plano itself - it must never be shown to the end client
-        # verbatim the way genuine extraction errors below are.
-        raise RuntimeError(
-            "ANTHROPIC_API_KEY no esta configurada en el servidor - define esa variable de entorno "
-            "en el despliegue del backend (ver render.yaml) para poder leer planos."
-        )
-
-    content_blocks = _build_content_blocks(contenido, media_type, nombre_archivo)
-    content_blocks.append(
-        {
-            "type": "text",
-            "text": (
-                "Extrae la pieza de este plano y llama a la herramienta registrar_pieza_extraida."
-                + (f"\n\nInstrucciones adicionales del usuario: {instrucciones_usuario}" if instrucciones_usuario else "")
-            ),
-        }
-    )
-
-    # Same reasoning as app/agent/orchestrator.py::ejecutar_turno - more
-    # retry headroom for a shared key under concurrent load from many clients.
-    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5)
-    tool = {
-        "name": TOOL_NAME,
-        "description": "Registra en formato estructurado la pieza extraida del plano de ingenieria.",
-        "input_schema": _tool_schema(),
-    }
+    tool = {"name": TOOL_NAME, "description": TOOL_DESCRIPTION, "input_schema": _tool_schema()}
 
     # anthropic.AnthropicError (bad key, rate limit, network) is deliberately
     # left to propagate uncaught here - app/api/routes_projects.py maps it to
@@ -135,7 +104,7 @@ def extraer_pieza_desde_plano(
     response = active_client.messages.create(
         model=settings.claude_model_vision,
         max_tokens=8192,
-        system=SYSTEM_PROMPT,
+        system=system_prompt,
         tools=[tool],
         tool_choice={"type": "tool", "name": TOOL_NAME},
         messages=[{"role": "user", "content": content_blocks}],
@@ -156,3 +125,71 @@ def extraer_pieza_desde_plano(
         ) from exc
 
     return ResultadoExtraccion(pieza=pieza, raw_tool_input=tool_use.input, stop_reason=response.stop_reason or "")
+
+
+def _verificar_y_refinar(
+    active_client: anthropic.Anthropic, content_blocks_plano: list[dict], primera_pasada: ResultadoExtraccion
+) -> ResultadoExtraccion:
+    """Second, independent pass: hand the SAME plano back to Claude along
+    with the first pass's JSON and have it actively audit that JSON
+    against the drawing (see VERIFICATION_SYSTEM_PROMPT for exactly what
+    it hunts for). This is not re-extraction from scratch - it exists
+    because a real client drawing showed that a single pass can miss a
+    real, continuous feature while everything else about the result still
+    looks complete and plausible; the miss only surfaced on a slower,
+    deliberate second read. Any failure here (bad JSON, no tool call)
+    falls back to the first pass rather than losing a working result over
+    the review step - this is a quality upgrade, not a hard requirement.
+    """
+    content_blocks = list(content_blocks_plano)
+    content_blocks.append(
+        {
+            "type": "text",
+            "text": (
+                "Este es el JSON que una primera pasada extrajo de este mismo plano. Auditalo segun tus "
+                "instrucciones y llama a registrar_pieza_extraida con el resultado final:\n\n"
+                f"{primera_pasada.pieza.model_dump_json(indent=2)}"
+            ),
+        }
+    )
+    try:
+        return _llamar_registrar_pieza(active_client, VERIFICATION_SYSTEM_PROMPT, content_blocks)
+    except ExtraccionError:
+        return primera_pasada
+
+
+def extraer_pieza_desde_plano(
+    contenido: bytes,
+    media_type: str,
+    nombre_archivo: str,
+    instrucciones_usuario: str | None = None,
+    client: anthropic.Anthropic | None = None,
+) -> ResultadoExtraccion:
+    if not settings.anthropic_api_key and client is None:
+        # RuntimeError, not ExtraccionError: this is an operator/deployment
+        # misconfiguration (see app/api/routes_projects.py), not something
+        # about the plano itself - it must never be shown to the end client
+        # verbatim the way genuine extraction errors below are.
+        raise RuntimeError(
+            "ANTHROPIC_API_KEY no esta configurada en el servidor - define esa variable de entorno "
+            "en el despliegue del backend (ver render.yaml) para poder leer planos."
+        )
+
+    content_blocks_plano = _build_content_blocks(contenido, media_type, nombre_archivo)
+    content_blocks = list(content_blocks_plano)
+    content_blocks.append(
+        {
+            "type": "text",
+            "text": (
+                "Extrae la pieza de este plano y llama a la herramienta registrar_pieza_extraida."
+                + (f"\n\nInstrucciones adicionales del usuario: {instrucciones_usuario}" if instrucciones_usuario else "")
+            ),
+        }
+    )
+
+    # Same reasoning as app/agent/orchestrator.py::ejecutar_turno - more
+    # retry headroom for a shared key under concurrent load from many clients.
+    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5)
+
+    primera_pasada = _llamar_registrar_pieza(active_client, SYSTEM_PROMPT, content_blocks)
+    return _verificar_y_refinar(active_client, content_blocks_plano, primera_pasada)

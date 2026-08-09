@@ -36,20 +36,34 @@ class _FakeToolUseBlock:
 
 
 class _FakeMessages:
-    def __init__(self, tool_input: dict | None, stop_reason: str = "tool_use"):
-        self._tool_input = tool_input
+    """`respuestas` is a list of tool_input dicts (or None) consumed one per
+    call, in order - the first is the initial extraction pass, the second
+    (if present) is the verification pass's response. If there are fewer
+    entries than calls made, the last entry repeats (covers tests that
+    only care about a single, uniform response across both passes).
+    """
+
+    def __init__(self, respuestas: list[dict | None], stop_reason: str = "tool_use"):
+        self._respuestas = respuestas
         self._stop_reason = stop_reason
-        self.last_call_kwargs: dict | None = None
+        self.llamadas: list[dict] = []
+
+    @property
+    def last_call_kwargs(self) -> dict | None:
+        return self.llamadas[-1] if self.llamadas else None
 
     def create(self, **kwargs):
-        self.last_call_kwargs = kwargs
-        content = [_FakeToolUseBlock(input=self._tool_input)] if self._tool_input is not None else []
+        self.llamadas.append(kwargs)
+        indice = min(len(self.llamadas) - 1, len(self._respuestas) - 1)
+        tool_input = self._respuestas[indice]
+        content = [_FakeToolUseBlock(input=tool_input)] if tool_input is not None else []
         return SimpleNamespace(content=content, stop_reason=self._stop_reason)
 
 
 class _FakeClient:
-    def __init__(self, tool_input: dict | None, stop_reason: str = "tool_use"):
-        self.messages = _FakeMessages(tool_input, stop_reason)
+    def __init__(self, tool_input: dict | list[dict | None] | None, stop_reason: str = "tool_use"):
+        respuestas = tool_input if isinstance(tool_input, list) else [tool_input]
+        self.messages = _FakeMessages(respuestas, stop_reason)
 
 
 def test_extraccion_exitosa_con_imagen():
@@ -112,5 +126,41 @@ def test_instrucciones_usuario_se_incluyen_en_el_mensaje():
     extraer_pieza_desde_plano(
         b"bytes", "image/png", "plano.png", instrucciones_usuario="material aluminio, tolerancia estandar", client=client
     )
-    contenido = client.messages.last_call_kwargs["messages"][0]["content"]
+    contenido = client.messages.llamadas[0]["messages"][0]["content"]  # the initial pass, not the verification pass
     assert any("tolerancia estandar" in b.get("text", "") for b in contenido if b["type"] == "text")
+
+
+def test_verificacion_es_una_segunda_llamada_independiente():
+    """The self-review pass (added after a real client drawing exposed a
+    missed feature that only surfaced on a slower second read) must
+    actually happen - not just be plumbing that never fires.
+    """
+    client = _FakeClient(EJEMPLO_PIEZA_VALIDA)
+    extraer_pieza_desde_plano(b"bytes", "image/png", "plano.png", client=client)
+
+    assert len(client.messages.llamadas) == 2
+    assert client.messages.llamadas[0]["system"] != client.messages.llamadas[1]["system"]
+    # the verification pass must receive the first pass's JSON, not re-derive from nothing
+    contenido_verificacion = client.messages.llamadas[1]["messages"][0]["content"]
+    assert any("placa_soporte" in b.get("text", "") for b in contenido_verificacion if b["type"] == "text")
+
+
+def test_verificacion_puede_corregir_la_primera_pasada():
+    """If the second pass finds something real (exactly what happened with
+    the DeAcero blade), its corrected JSON - not the first pass's - is
+    what the caller gets back.
+    """
+    corregido = {**EJEMPLO_PIEZA_VALIDA, "pieza": "placa_soporte_corregida"}
+    client = _FakeClient([EJEMPLO_PIEZA_VALIDA, corregido])
+    resultado = extraer_pieza_desde_plano(b"bytes", "image/png", "plano.png", client=client)
+    assert resultado.pieza.pieza == "placa_soporte_corregida"
+
+
+def test_verificacion_fallida_no_pierde_la_primera_pasada():
+    """The review pass is a quality upgrade, not a hard dependency - if it
+    errors out (bad JSON, no tool call), the caller still gets the first
+    pass's working result instead of losing the extraction entirely.
+    """
+    client = _FakeClient([EJEMPLO_PIEZA_VALIDA, None])  # second call returns no tool_use
+    resultado = extraer_pieza_desde_plano(b"bytes", "image/png", "plano.png", client=client)
+    assert resultado.pieza.pieza == "placa_soporte"

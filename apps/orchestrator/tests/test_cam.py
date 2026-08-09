@@ -160,19 +160,37 @@ def test_perfil_exterior_genera_contorno_real_redondeado_en_las_esquinas():
     assert max_x > 100.0
 
 
-def test_escalon_sigue_siendo_placeholder_honesto():
-    """escalon no tiene suficiente geometria en el JSON para una trayectoria
-    real (que arista, que direccion) - debe seguir marcado como pendiente."""
+def test_escalon_genera_trayectoria_real_a_lo_largo_del_borde():
+    """Found missing on a real client part (a DeAcero shear blade): a
+    relief running the full length of one edge. escalon used to always be
+    a placeholder (not enough geometry in the JSON to route a toolpath) -
+    now that cara/ancho_mm/profundidad_mm fully describe the edge strip,
+    it gets real G1 motion like cajera/ranura.
+    """
     pieza = _placa_soporte()
-    pieza.features.append(
-        Feature(id="f3", tipo=TipoFeature.ESCALON, ancho_mm=10, largo_mm=10, profundidad_mm=2, posicion=Posicion2D(x=10, y=10))
-    )
+    pieza.features.append(Feature(id="f3", tipo=TipoFeature.ESCALON, cara="lateral_frontal", ancho_mm=10, profundidad_mm=2))
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    assert "TRAYECTORIA NO GENERADA" not in resultado.contenido
+    assert resultado.operaciones_con_movimiento_real == 3  # barreno + cajera (both already in _placa_soporte) + escalon
+    assert resultado.operaciones_solo_planeadas == 0
+
+
+def test_escalon_sin_profundidad_sigue_siendo_placeholder_honesto():
+    """No profundidad_mm anywhere in the drawing means no cut in the
+    STEP/STL model (see app/geometry/builder.py) - the G-code must refuse
+    to invent motion here too, rather than fall back to the generic
+    "guess 50% of espesor" rule every other blind feature gets, which
+    would leave the G-code cutting material the solid model never removed.
+    """
+    pieza = _placa_soporte()
+    pieza.features.append(Feature(id="f3", tipo=TipoFeature.ESCALON, cara="lateral_frontal", ancho_mm=10, profundidad_mm=None))
     plan = planear_trayectoria(pieza)
     resultado = generar_codigo_g(pieza, plan)
 
     assert "TRAYECTORIA NO GENERADA" in resultado.contenido
-    assert resultado.operaciones_solo_planeadas == 1
-    assert any("quedaron solo planeadas" in w for w in resultado.advertencias)
+    assert "tampoco se modelo en el solido" in resultado.contenido
 
 
 def test_cajera_con_herramienta_mas_grande_que_el_bolsillo_no_genera_movimiento_falso():

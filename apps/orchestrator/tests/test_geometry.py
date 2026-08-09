@@ -180,9 +180,100 @@ def test_dimensiones_poligonal_requiere_puntos_perfil():
 
 def test_feature_no_soportado_se_omite_no_crashea():
     pieza = _placa_soporte()
-    pieza.features.append(Feature(id="f3", tipo=TipoFeature.ESCALON, ancho_mm=10, largo_mm=10, profundidad_mm=2))
+    pieza.features.append(Feature(id="f3", tipo=TipoFeature.PERFIL_EXTERIOR, ancho_mm=10, largo_mm=10, profundidad_mm=2))
     resultado = build_pieza(pieza)
-    assert any("escalon" in o for o in resultado.features_omitidos)
+    assert any("perfil_exterior" in o for o in resultado.features_omitidos)
+
+
+def test_escalon_corta_relieve_a_lo_largo_de_todo_el_borde():
+    """Found missing on a real client part (a DeAcero shear blade): a
+    continuous relief running the full length of one edge, visible in the
+    plano as a line parallel to that edge rather than a per-position
+    callout. escalon used to be a dead enum value the engine always
+    omitted - this is the real implementation.
+    """
+    pieza = Pieza(
+        pieza="placa_con_relieve",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="relieve", tipo=TipoFeature.ESCALON, cara="lateral_frontal", ancho_mm=8, profundidad_mm=3)],
+    )
+    resultado = build_pieza(pieza)
+    assert resultado.features_omitidos == []
+    props = calcular_propiedades(resultado.solido)
+    # A block 100x60x10 with an 8mm-wide, 3mm-deep strip removed along the
+    # full 100mm length of the Y=0 edge: 100 * 8 * 3 = 2400mm3 removed.
+    assert props["volumen_mm3"] == pytest.approx(100 * 60 * 10 - 2400, rel=0.001)
+    assert props["bbox_mm"]["x"] == pytest.approx(100.0, abs=0.01)
+    assert props["bbox_mm"]["y"] == pytest.approx(60.0, abs=0.01)
+    assert props["bbox_mm"]["z"] == pytest.approx(10.0, abs=0.01)
+
+
+def test_escalon_en_cada_borde_remueve_el_volumen_de_ese_borde_especifico():
+    """The relief must actually span the edge it's named for and only that
+    edge's length - lateral_frontal/posterior run the 100mm length,
+    lateral_izquierda/derecha run the 60mm width, so a 100x60 (non-square)
+    base removes a DIFFERENT volume on each pair, which is exactly the
+    proof it's cutting along the named edge and not some fixed default.
+    """
+    esperado = {
+        "lateral_frontal": 100 * 8 * 3,
+        "lateral_posterior": 100 * 8 * 3,
+        "lateral_izquierda": 60 * 8 * 3,
+        "lateral_derecha": 60 * 8 * 3,
+    }
+    for cara, removido_esperado in esperado.items():
+        pieza = Pieza(
+            pieza="placa_con_relieve",
+            material=Material(nombre="Aluminio 6061"),
+            dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+            features=[Feature(id="relieve", tipo=TipoFeature.ESCALON, cara=cara, ancho_mm=8, profundidad_mm=3)],
+        )
+        resultado = build_pieza(pieza)
+        assert resultado.features_omitidos == []
+        volumen = calcular_propiedades(resultado.solido)["volumen_mm3"]
+        assert volumen == pytest.approx(100 * 60 * 10 - removido_esperado, rel=0.001), cara
+
+
+def test_escalon_con_cara_no_reconocida_lanza_error():
+    pieza = Pieza(
+        pieza="placa_con_relieve",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="relieve", tipo=TipoFeature.ESCALON, cara="superior", ancho_mm=8, profundidad_mm=3)],
+    )
+    with pytest.raises(GeometryBuildError):
+        build_pieza(pieza)
+
+
+def test_escalon_sin_profundidad_se_omite_no_adivina():
+    """A relief with a confirmed location/width but no depth anywhere in
+    the drawing must be omitted, never built with a guessed depth - unlike
+    cajera/ranura, which do default a blind pocket's depth, this feature
+    spans an entire edge and is too consequential for that fallback.
+    """
+    pieza = Pieza(
+        pieza="placa_con_relieve",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(id="relieve", tipo=TipoFeature.ESCALON, cara="lateral_frontal", ancho_mm=8, profundidad_mm=None)],
+    )
+    resultado = build_pieza(pieza)
+    assert any("escalon" in o and "profundidad" in o for o in resultado.features_omitidos)
+    props = calcular_propiedades(resultado.solido)
+    assert props["volumen_mm3"] == pytest.approx(100 * 60 * 10, rel=0.001)
+
+
+def test_escalon_en_base_no_rectangular_se_omite():
+    perfil = [Posicion2D(x=0, y=0), Posicion2D(x=50, y=0), Posicion2D(x=50, y=30), Posicion2D(x=0, y=30)]
+    pieza = Pieza(
+        pieza="placa_poligonal_con_relieve",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.POLIGONAL, espesor_mm=5, puntos_perfil_mm=perfil),
+        features=[Feature(id="relieve", tipo=TipoFeature.ESCALON, cara="lateral_frontal", ancho_mm=5, profundidad_mm=1)],
+    )
+    resultado = build_pieza(pieza)
+    assert any("escalon" in o and "rectangular" in o for o in resultado.features_omitidos)
 
 
 @pytest.mark.parametrize(

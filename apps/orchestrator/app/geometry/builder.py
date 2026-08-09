@@ -17,10 +17,25 @@ Deliberately unsupported (raise GeometryBuildError instead of guessing):
 - pockets/slots on lateral_* faces (barrenos are supported there - see
   CARAS_LATERALES - but a rectangular cut needs a second in-plane axis
   convention this schema doesn't carry yet)
-- feature.tipo = escalon (a "step" feature meant for adding one to an
-  otherwise-simple base; use forma_base=poligonal with puntos_perfil_mm
-  instead to describe the exact stepped/notched outline directly - see
+- feature.tipo = perfil_exterior (a bare feature entry can't describe an
+  open/complex silhouette by itself; use forma_base=poligonal with
+  puntos_perfil_mm instead to trace the exact outline directly - see
   Dimensiones.puntos_perfil_mm)
+
+feature.tipo = escalon: a rectangular relief/rabbet removed along the FULL
+length of one edge of a rectangular base - e.g. the continuous step found
+running the length of a blade's back edge, visible in a front/plan view as
+a line parallel to that edge rather than a per-position callout. Unlike
+every other feature type this one has no posicion/posiciones - it always
+spans the whole edge named in `cara` (reusing the lateral_* vocabulary:
+lateral_izquierda/derecha/frontal/posterior picks WHICH edge), `ancho_mm`
+is how far the cut extends in from that edge, `profundidad_mm` is how deep
+in Z. Always cuts from the top face (Z=espesor downward) - this covers the
+common case (a relief machined into the working face) but not a relief
+into the bottom face from a single feature; model that as two features
+with forma_base flipped if it's ever needed, rather than adding a second
+face-selection field pre-emptively.
+
 Everything unsupported surfaces as a clear warning or error so a human
 catches it at the Capa 6 model-preview checkpoint - never modeled blindly.
 """
@@ -195,6 +210,45 @@ def _cortar_ranura_redondeada(
     return solido.cut(herramienta)
 
 
+def _cortar_relieve_borde(solido: cq.Workplane, feature: Feature, dims: Dimensiones) -> cq.Workplane:
+    """Rectangular relief/rabbet spanning the FULL length of one edge of a
+    rectangular base - see the ESCALON docstring at the top of this module.
+    Built as one box tool positioned by the corner-origin convention every
+    other shape in this file uses (see _base_rectangular), oversized past
+    the part's outer boundary on the open sides so the boolean cut has
+    clean overlap regardless of which edge is picked.
+
+    Unlike every other cutting feature in this module, `ancho_mm` and
+    `profundidad_mm` do NOT default to a guessed value if missing (the
+    caller in build_pieza must check for that and omit instead of calling
+    this) - a relief that spans an entire edge is consequential enough
+    that a silently-guessed depth is worse than not modeling it, exactly
+    the kind of gap a real client drawing (a DeAcero blade with this exact
+    feature and no depth dimension anywhere) exposed.
+    """
+    ancho_relieve = feature.ancho_mm
+    profundidad = feature.profundidad_mm
+    largo, ancho_pieza, espesor = dims.largo_mm, dims.ancho_mm, dims.espesor_mm
+    m = MARGEN_CORTE_MM
+
+    if feature.cara == "lateral_frontal":  # Y = 0 edge
+        x0, y0, w, h = -m, -m, largo + 2 * m, ancho_relieve + m
+    elif feature.cara == "lateral_posterior":  # Y = ancho edge
+        x0, y0, w, h = -m, ancho_pieza - ancho_relieve, largo + 2 * m, ancho_relieve + m
+    elif feature.cara == "lateral_izquierda":  # X = 0 edge
+        x0, y0, w, h = -m, -m, ancho_relieve + m, ancho_pieza + 2 * m
+    elif feature.cara == "lateral_derecha":  # X = largo edge
+        x0, y0, w, h = largo - ancho_relieve, -m, ancho_relieve + m, ancho_pieza + 2 * m
+    else:
+        raise GeometryBuildError(
+            f"escalon (id={feature.id or '?'}): cara '{feature.cara}' no reconocida - usar lateral_izquierda, "
+            "lateral_derecha, lateral_frontal o lateral_posterior para indicar a lo largo de que borde corre el relieve."
+        )
+
+    herramienta = cq.Workplane("XY").workplane(offset=espesor).center(x0, y0).rect(w, h, centered=False).extrude(-profundidad)
+    return solido.cut(herramienta)
+
+
 def _arista_vertical_mas_cercana(solido: cq.Workplane, x: float, y: float):
     """The single "|Z" edge whose XY position is closest to (x, y) - for a
     prismatic solid every vertical edge sits at exactly one XY point
@@ -282,8 +336,26 @@ def build_pieza(pieza: Pieza) -> BuildResult:
         for pos in f.lista_posiciones():
             solido = _agregar_saliente_cilindrico(solido, f, pos, dims.espesor_mm)
 
+    # Edge reliefs (escalon) span the whole edge, not a position - handled
+    # as their own pass rather than in the per-position loop below, and
+    # only for the base shapes where "an edge" is unambiguous.
     for f in pieza.features:
-        if f.tipo in (TipoFeature.REDONDEO, TipoFeature.CHAFLAN, TipoFeature.SALIENTE):
+        if f.tipo != TipoFeature.ESCALON:
+            continue
+        if dims.forma_base != FormaBase.RECTANGULAR:
+            omitidos.append(f"escalon (id={f.id or '?'}): solo soportado en piezas de base rectangular")
+            continue
+        if f.ancho_mm is None or f.profundidad_mm is None:
+            omitidos.append(
+                f"escalon (id={f.id or '?'}): falta ancho_mm y/o profundidad_mm - un relieve a lo largo de "
+                "todo un borde es demasiado consecuente para adivinar esas medidas, se omitio en vez de "
+                "suponer un valor. Confirma las cotas faltantes y vuelve a intentar."
+            )
+            continue
+        solido = _cortar_relieve_borde(solido, f, dims)
+
+    for f in pieza.features:
+        if f.tipo in (TipoFeature.REDONDEO, TipoFeature.CHAFLAN, TipoFeature.SALIENTE, TipoFeature.ESCALON):
             continue  # already handled above
 
         if f.patron_incompleto:
@@ -340,7 +412,7 @@ def build_pieza(pieza: Pieza) -> BuildResult:
                         f"ranura (id={f.id or '?'}): largo_mm ({largo}) no es mayor que ancho_mm ({ancho}) - "
                         "no se puede construir como ranura con extremos redondeados, se modelo como rectangulo."
                     )
-            elif f.tipo in (TipoFeature.ESCALON, TipoFeature.PERFIL_EXTERIOR):
+            elif f.tipo == TipoFeature.PERFIL_EXTERIOR:
                 omitidos.append(
                     f"{f.tipo.value} (id={f.id or '?'}): un feature aislado no puede describir un contorno "
                     "escalonado/con muescas - usa forma_base=poligonal con puntos_perfil_mm en la pieza para "

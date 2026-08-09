@@ -5,10 +5,11 @@ every decision here, straight from the project brief:
 
 1. Never let fabricated toolpath motion look authoritative. Where the
    cutter-center geometry is well-defined and computable (drilling with
-   canned cycles; rectangular pocket clearing; exterior contour offsets -
-   see cam/toolpath_geometry.py) we generate real motion. Where it isn't
-   (escalon, or anything the geometry engine itself couldn't build) we
-   leave an explicit comment placeholder, never invented G1/G2/G3 motion.
+   canned cycles; rectangular pocket clearing; edge relief clearing;
+   exterior contour offsets - see cam/toolpath_geometry.py) we generate
+   real motion. Where it isn't (a feature type the geometry engine itself
+   couldn't build, or one missing a dimension it needs) we leave an
+   explicit comment placeholder, never invented G1/G2/G3 motion.
 2. Every file this function produces is stamped, top and bottom, as a
    simulation pending real Mastercam SDK verification. Capa 6 still
    requires human approval regardless, but the file itself must not be
@@ -158,6 +159,66 @@ def _bloque_cajera(pp: dict, feature: Feature, op, tool_num: int) -> tuple[list[
     return lineas, hubo_movimiento
 
 
+def _rectangulo_relieve_borde(feature: Feature, pieza: Pieza) -> tuple[float, float, float, float] | None:
+    """(cx, cy, largo_x, ancho_y) of the escalon's rectangular footprint -
+    the exact same edge-strip geometry app.geometry.builder._cortar_relieve_borde
+    cuts, so the toolpath clears the same area the solid model actually has
+    machined away. Returns None for an unrecognized cara (mirrors the
+    builder's GeometryBuildError case, but here it's just "can't route it").
+    """
+    d = pieza.dimensiones
+    largo, ancho_pieza = d.largo_mm, d.ancho_mm
+    ancho_relieve = feature.ancho_mm or 0.0
+    if feature.cara == "lateral_frontal":  # Y = 0 edge
+        return largo / 2, ancho_relieve / 2, largo, ancho_relieve
+    if feature.cara == "lateral_posterior":  # Y = ancho edge
+        return largo / 2, ancho_pieza - ancho_relieve / 2, largo, ancho_relieve
+    if feature.cara == "lateral_izquierda":  # X = 0 edge
+        return ancho_relieve / 2, ancho_pieza / 2, ancho_relieve, ancho_pieza
+    if feature.cara == "lateral_derecha":  # X = largo edge
+        return largo - ancho_relieve / 2, ancho_pieza / 2, ancho_relieve, ancho_pieza
+    return None
+
+
+def _bloque_escalon(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int) -> tuple[list[str], bool]:
+    lineas = _encabezado_operacion(pp, feature, op, tool_num)
+    # Mirror app.geometry.builder's own refusal exactly: a relief with no
+    # confirmed ancho/profundidad has no cut in the STEP/STL model, so it
+    # must not get real G1 motion here either (rules.py's generic
+    # "guess 50% of espesor for a blind feature" fallback would otherwise
+    # hand this a depth STL/STEP never got - the model and the G-code
+    # would disagree about whether the part was even cut here).
+    if feature.ancho_mm is None or feature.profundidad_mm is None:
+        lineas.append(
+            _comentario(pp, f"ESCALON id={feature.id or '?'}: falta ancho_mm y/o profundidad_mm - TRAYECTORIA NO GENERADA (tampoco se modelo en el solido)")
+        )
+        lineas.extend(_pie_operacion(pp, op))
+        return lineas, False
+
+    rect = _rectangulo_relieve_borde(feature, pieza)
+    if rect is None:
+        lineas.append(_comentario(pp, f"ESCALON id={feature.id or '?'}: cara '{feature.cara}' no reconocida - TRAYECTORIA NO GENERADA"))
+        lineas.extend(_pie_operacion(pp, op))
+        return lineas, False
+
+    cx, cy, largo, ancho = rect
+    puntos = puntos_zigzag_rectangulo(cx, cy, largo, ancho, op.herramienta.diametro_mm)
+    if puntos is None:
+        lineas.append(
+            _comentario(
+                pp,
+                f"HERRAMIENTA {op.herramienta.diametro_mm}mm NO CABE en el ancho del relieve "
+                f"({ancho}mm) en '{feature.cara}' - TRAYECTORIA NO GENERADA, requiere herramienta mas pequena",
+            )
+        )
+        lineas.extend(_pie_operacion(pp, op))
+        return lineas, False
+
+    lineas.extend(_recorrer_puntos_multi_pasada(pp, op, puntos))
+    lineas.extend(_pie_operacion(pp, op))
+    return lineas, True
+
+
 def _puntos_contorno_pieza(pieza: Pieza, offset: float) -> list[Punto] | None:
     d = pieza.dimensiones
     if d.forma_base == FormaBase.RECTANGULAR and d.largo_mm and d.ancho_mm:
@@ -272,6 +333,11 @@ def generar_codigo_g(pieza: Pieza, plan: PlanDetallado, numero_programa: int = 1
             sin_movimiento += 0 if hubo_movimiento else 1
         elif feature.tipo == TipoFeature.SALIENTE:
             bloque, hubo_movimiento = _bloque_saliente(pp, feature, op, pieza, tool_num)
+            lineas.extend(bloque)
+            con_movimiento += 1 if hubo_movimiento else 0
+            sin_movimiento += 0 if hubo_movimiento else 1
+        elif feature.tipo == TipoFeature.ESCALON:
+            bloque, hubo_movimiento = _bloque_escalon(pp, feature, op, pieza, tool_num)
             lineas.extend(bloque)
             con_movimiento += 1 if hubo_movimiento else 0
             sin_movimiento += 0 if hubo_movimiento else 1

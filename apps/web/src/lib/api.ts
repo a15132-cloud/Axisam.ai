@@ -42,26 +42,28 @@ export class ApiError extends Error {
 // Browsers deliberately hide the REASON a cross-origin request failed from
 // JavaScript (a security feature, not a bug) - axios/fetch both just see
 // "Network Error" whether the server is genuinely unreachable (down, wrong
-// URL, DNS) or perfectly healthy but blocking this origin via CORS
-// (AXISCAM_CORS_ORIGINS misconfigured). Those need completely different
-// fixes, but the generic message can't tell a non-technical user which one
-// they're looking at - "revisa tu internet" is actively wrong advice when
-// it's really a CORS mismatch, which is what made that message so
-// frustrating to a user who correctly knows their internet is fine.
+// URL, DNS) or briefly mid-restart (a deploy cutover: the in-flight request
+// dropped, but a follow-up probe fired a moment later lands on the new,
+// already-answering instance). CORS used to be a third possibility here, but
+// the backend now sends allow_origins=["*"] unconditionally (see
+// app/main.py) - a real CORS block from THIS backend is no longer possible,
+// so a message that confidently blamed "CORS/AXISCAM_CORS_ORIGINS" was
+// actively misleading here now, telling a non-technical user to go find a
+// server admin to fix a setting that isn't the actual problem anymore.
 //
 // The workaround: a `mode: "no-cors"` fetch to the SAME url still performs
-// the real network request (DNS, TCP, TLS) - it only refuses to let JS
-// read the response body/headers. So it resolves if the server answered
-// at all (CORS blocked reading the answer, not the network), and rejects
-// only if the network layer itself failed. That one bit of signal is
-// enough to tell the two cases apart and give each its own real fix.
+// the real network request (DNS, TCP, TLS) - it only refuses to let JS read
+// the response body/headers. So it resolves if the server answers at all,
+// and rejects only if the network layer itself failed right now too. That's
+// still useful signal - "the server is reachable this instant" vs. "it
+// isn't" - just not proof of CORS specifically anymore.
 async function diagnosticarNetworkError(): Promise<string> {
   try {
     await fetch(`${baseURL}/health`, { mode: "no-cors", signal: AbortSignal.timeout(6000) });
     return (
-      "El servidor SÍ está encendido y respondió, pero está rechazando la conexión desde este sitio " +
-      "(configuración CORS/AXISCAM_CORS_ORIGINS en el backend no incluye este dominio). No es tu internet - " +
-      "esto lo tiene que corregir quien administra el servidor."
+      "El servidor respondió en este momento, pero la petición anterior se cortó a medio camino - probablemente " +
+      "el servidor se estaba reiniciando por una actualización justo en ese instante. No es tu internet ni tu " +
+      "proyecto se perdió. Intenta de nuevo."
     );
   } catch {
     return (
@@ -99,6 +101,16 @@ function unwrap<T>(fn: () => Promise<{ data: T }>, reintentosRestantes = 1): Pro
         );
       }
       if (err?.message === "Network Error") {
+        if (reintentosRestantes > 0) {
+          // Mismo caso que el 503 de abajo: un "Network Error" que resulta
+          // ser una actualizacion del servidor en curso (ver
+          // diagnosticarNetworkError) se resuelve solo en un par de
+          // segundos - reintentar antes de mostrar cualquier mensaje evita
+          // que el usuario vea un error por algo que ya no es cierto para
+          // cuando lo lee.
+          await new Promise((resolve) => setTimeout(resolve, 3000));
+          return unwrap(fn, reintentosRestantes - 1);
+        }
         throw new ApiError(await diagnosticarNetworkError());
       }
       const status = err?.response?.status;

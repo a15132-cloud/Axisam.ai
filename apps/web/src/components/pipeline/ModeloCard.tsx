@@ -1,5 +1,6 @@
 import { useState } from "react";
-import { Check, Download, ExternalLink } from "lucide-react";
+import { motion } from "framer-motion";
+import { Check, Download, ExternalLink, HelpCircle } from "lucide-react";
 import { Button } from "../common/Button";
 import { WarningBanner } from "../common/WarningBanner";
 import { StlViewer } from "../viewer/StlViewer";
@@ -38,6 +39,10 @@ export function ModeloCard({
   const [activandoSw, setActivandoSw] = useState(false);
   const [abriendoMc, setAbriendoMc] = useState(false);
   const [errorBridge, setErrorBridge] = useState<string | null>(null);
+  const [omisionesRevisadas, setOmisionesRevisadas] = useState(false);
+
+  const hayOmisiones = featuresOmitidos.length > 0;
+  const puedeConfirmar = !hayOmisiones || omisionesRevisadas;
 
   async function verEnSolidworks() {
     setErrorBridge(null);
@@ -120,10 +125,39 @@ export function ModeloCard({
 
       {errorBridge && <p className="mt-2 text-xs text-[var(--color-danger)]">{errorBridge}</p>}
 
-      {featuresOmitidos.length > 0 && (
-        <div className="mt-3">
-          <WarningBanner title="Features no modelados automáticamente" items={featuresOmitidos} />
-        </div>
+      {hayOmisiones && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: "auto" }}
+          className="mt-3 overflow-hidden rounded-lg border border-[var(--color-warn)]/30 bg-[var(--color-warn)]/10 px-3 py-2.5"
+        >
+          <div className="flex items-start gap-2">
+            <HelpCircle className="mt-0.5 h-4 w-4 shrink-0 text-[var(--color-warn)]" />
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold text-[var(--color-warn)]">
+                Estas features NO quedaron en el modelo - antes de continuar, revisa si alguna es importante:
+              </p>
+              <ul className="mt-1.5 space-y-1 text-xs text-[var(--color-text-muted)]">
+                {featuresOmitidos.map((item, i) => (
+                  <li key={i} className="leading-relaxed">
+                    <span className="text-[var(--color-warn)]">·</span> {item}
+                  </li>
+                ))}
+              </ul>
+              {!readOnly && (
+                <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-xs text-[var(--color-text)]">
+                  <input
+                    type="checkbox"
+                    checked={omisionesRevisadas}
+                    onChange={(e) => setOmisionesRevisadas(e.target.checked)}
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 accent-[var(--color-accent)]"
+                  />
+                  Ya revisé esta lista - confirmo que quiero continuar así, aunque falten esas features del modelo.
+                </label>
+              )}
+            </div>
+          </div>
+        </motion.div>
       )}
       {advertencias.length > 0 && (
         <div className="mt-3">
@@ -133,7 +167,14 @@ export function ModeloCard({
 
       {!readOnly && (
         <div className="mt-4">
-          <Button variant="primary" icon={<Check className="h-3.5 w-3.5" />} onClick={onConfirmar} loading={confirming}>
+          <Button
+            variant="primary"
+            icon={<Check className="h-3.5 w-3.5" />}
+            onClick={onConfirmar}
+            loading={confirming}
+            disabled={!puedeConfirmar}
+            title={puedeConfirmar ? undefined : "Marca la casilla de arriba antes de confirmar el modelo"}
+          >
             Confirmar modelo y continuar a trayectorias
           </Button>
         </div>

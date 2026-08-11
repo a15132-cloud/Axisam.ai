@@ -3,7 +3,7 @@ import math
 from app.cam.gcode import generar_codigo_g
 from app.cam.planner import planear_trayectoria
 from app.cam.simulate import simular_maquinado
-from app.schemas.piece import Dimensiones, Feature, FormaBase, Material, Pieza, Posicion2D, TipoFeature
+from app.schemas.piece import Dimensiones, Feature, FormaBase, Material, Pieza, Posicion2D, SegmentoChaflanCompuesto, TipoFeature
 
 
 def _placa_soporte() -> Pieza:
@@ -279,6 +279,130 @@ def test_ciclo_taladrado_no_se_cancela_entre_barrenos():
     idx_g80 = next(i for i, l in enumerate(lineas) if l.strip() == "G80")
     for linea in lineas[idx_ciclo + 1 : idx_g80]:
         assert not linea.startswith("G0"), f"G0 cancela el ciclo de taladrado modal: {linea!r}"
+
+
+def test_barreno_roscado_avisa_que_solo_genero_el_pretaladro():
+    """Regression test for a real bug found in this audit: barreno_roscado
+    was routed through the exact same drilling block as a plain barreno,
+    which only ever emits a pilot-hole cycle (G81/G83) - there was no G84/
+    tapping cycle anywhere in this codebase, and no warning said so either.
+    The file looked complete (real motion, no red flags) while silently
+    never actually cutting the thread. Must now be loudly disclosed, both
+    in the .nc comments and in the structured advertencias the UI surfaces.
+    """
+    pieza = Pieza(
+        pieza="placa_con_rosca",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="f1", tipo=TipoFeature.BARRENO_ROSCADO, diametro_mm=6, rosca="M6x1.0", posicion=Posicion2D(x=50, y=30), pasante=True),
+        ],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    # This must already be visible in the TOOLPATH PLAN's own advertencias -
+    # what SimulacionCard shows BEFORE the human approves - not just in the
+    # final G-code, which only gets generated AFTER aprobacion_final is
+    # already True (see app/tools/handlers.py). Otherwise a human approves
+    # believing the part is fully machined and only finds out afterward.
+    assert any("pretaladro" in w for w in plan.plan.advertencias)
+
+    assert "SOLO genero el pretaladro" in resultado.contenido
+    assert "falta el ciclo de machuelo" in resultado.contenido
+    assert any("pretaladro" in a and "f1" in a for a in resultado.advertencias)
+    # The pilot hole itself IS real motion - not the same failure mode as
+    # "nothing was cut", so it still counts and must NOT show up in the
+    # sin-cortar ATENCION block (that would misdescribe what's wrong here).
+    assert resultado.operaciones_con_movimiento_real == 1
+    assert "OPERACION(ES) SIN CORTAR" not in resultado.contenido
+
+
+def test_chaflan_compuesto_avisa_que_no_tiene_trayectoria_generada():
+    """Regression test for a real bug found in this audit: chaflanes_compuestos
+    (the multi-stage countersink used on the real DeAcero part earlier this
+    project) is cut correctly into the STEP/STL by the geometry engine, but
+    had ZERO references anywhere in app/cam/ - the G-code just drilled the
+    straight bore and said nothing about the countersink at all. A part built
+    from this file would come out with an unmachined countersink and no
+    warning telling anyone that happened.
+    """
+    pieza = Pieza(
+        pieza="placa_con_avellanado",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=20),
+        features=[
+            Feature(
+                id="f1",
+                tipo=TipoFeature.BARRENO,
+                diametro_mm=10,
+                pasante=True,
+                posicion=Posicion2D(x=50, y=30),
+                chaflanes_compuestos=[
+                    SegmentoChaflanCompuesto(profundidad_mm=3, angulo_grados=20),
+                    SegmentoChaflanCompuesto(profundidad_mm=5, angulo_grados=30),
+                ],
+            ),
+        ],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    # Same visibility requirement as the barreno_roscado case above: this
+    # must show up before approval, in the plan's own advertencias.
+    assert any("avellanado" in w for w in plan.plan.advertencias)
+
+    assert "avellanado no tiene" in resultado.contenido
+    assert any("avellanado" in a and "f1" in a for a in resultado.advertencias)
+    # El barreno recto si es movimiento real - el hueco es especificamente
+    # el avellanado, no la operacion completa.
+    assert resultado.operaciones_con_movimiento_real == 1
+
+
+def test_barreno_lateral_no_genera_ciclo_recto_en_z():
+    """Regression test for a real bug found in this audit: a barreno drilled
+    into a side face (feature.cara = lateral_*, see app.geometry.builder's
+    CARAS_LATERALES) was falling into the same code path as a normal top-down
+    hole, which only ever emits a straight -Z canned cycle (G81/G83) at the
+    hole's (x, y). That's real-looking G-code cutting on the wrong axis, in
+    the wrong place - worse than not generating it. A lateral barreno must be
+    left as an explicit "not generated" placeholder instead, exactly like any
+    other feature this generator can't safely route.
+    """
+    pieza = Pieza(
+        pieza="placa_con_barreno_lateral",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="f1", tipo=TipoFeature.BARRENO, diametro_mm=6, cara="lateral_frontal", posicion=Posicion2D(x=50, y=5)),
+        ],
+    )
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    # Same visibility requirement as the other two gaps above: this must
+    # show up before approval, in the plan's own advertencias.
+    assert any("4to eje" in w for w in plan.plan.advertencias)
+
+    # No ACTUAL canned-cycle command line was emitted (the strategy
+    # description text legitimately mentions "G81/G83" as prose, so check
+    # real G-code lines specifically, same style as
+    # test_ciclo_taladrado_no_se_cancela_entre_barrenos).
+    assert not any(l.startswith(("G81", "G83")) for l in resultado.contenido.splitlines())
+    assert "TRAYECTORIA NO GENERADA" in resultado.contenido
+    assert "lateral_frontal" in resultado.contenido
+    assert resultado.operaciones_con_movimiento_real == 0
+    assert resultado.operaciones_solo_planeadas == 1
+    assert "id=f1" in resultado.contenido  # surfaced with its own feature id, not silently dropped
+
+
+def test_barreno_normal_no_lateral_sigue_generando_ciclo_real():
+    """Guard against the lateral check being too broad and swallowing
+    ordinary top-face barrenos (cara=None or "superior")."""
+    pieza = _placa_soporte()
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+    assert "G81" in resultado.contenido or "G83" in resultado.contenido
 
 
 def test_simular_maquinado_resumen():

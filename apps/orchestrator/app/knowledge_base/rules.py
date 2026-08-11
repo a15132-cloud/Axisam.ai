@@ -205,6 +205,33 @@ def planear_operacion(
     estrategia = seleccionar_estrategia(feature)
     notas: list[str] = []
 
+    # These three warnings describe real gaps in what the CAM layer can
+    # generate (see app/cam/gcode.py for the matching, more detailed notes
+    # attached to the actual G-code) - they belong here too, not just in
+    # the final .nc file, because this function's `notas` are what
+    # app.cam.planner surfaces into ToolpathPlan.advertencias, which is
+    # what the human sees at the simulation/approval gate BEFORE the G-code
+    # even exists (see app/tools/handlers.py: generar_codigo_g only runs
+    # after aprobacion_final is already True). Without this, a human could
+    # approve a part believing it's fully machined and only discover the
+    # thread/countersink/lateral-hole gap after approval, in a file they
+    # already signed off on.
+    if feature.tipo == TipoFeature.BARRENO_ROSCADO:
+        notas.append(
+            "Este barreno_roscado solo se puede PLANEAR/CORTAR como pretaladro - el ciclo de machuelo/roscado "
+            "no se genera automaticamente, hay que agregarlo manualmente en Mastercam."
+        )
+    if feature.chaflanes_compuestos:
+        notas.append(
+            "Este barreno tiene avellanado compuesto (chaflanes_compuestos) modelado en el STEP/STL, pero su "
+            "trayectoria de maquinado no se planea automaticamente - requiere programarse manualmente."
+        )
+    if feature.cara and feature.cara.startswith("lateral") and feature.tipo in (TipoFeature.BARRENO, TipoFeature.BARRENO_ROSCADO):
+        notas.append(
+            f"Este barreno esta en cara '{feature.cara}' (perforacion lateral) - requiere 4to eje/cabezal "
+            "angular, no se genera trayectoria automatica en Z."
+        )
+
     if feature.tipo == TipoFeature.BARRENO_ROSCADO and feature.rosca:
         machuelo = buscar_machuelo(feature.rosca)
         diametro_broca = machuelo["diametro_pretaladro_mm"] if machuelo else (feature.diametro_mm or 5.0) * 0.85

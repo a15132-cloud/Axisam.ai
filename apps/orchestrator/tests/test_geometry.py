@@ -65,6 +65,45 @@ def test_forma_base_no_soportada_lanza_error():
         build_pieza(pieza)
 
 
+def _placa_lisa_para_esquinas() -> Pieza:
+    """Same footprint as _placa_soporte but with NO pre-existing corner
+    feature, so a test can add exactly one REDONDEO/CHAFLAN without a
+    second all-corners feature fighting over the same edges.
+    """
+    return Pieza(
+        pieza="placa_lisa",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+    )
+
+
+def test_chaflan_45_grados_si_se_modela():
+    pieza = _placa_lisa_para_esquinas()
+    pieza.features.append(Feature(id="c45", tipo=TipoFeature.CHAFLAN, radio_mm=3, angulo_grados=45))
+    resultado = build_pieza(pieza)
+    assert not any("c45" in o for o in resultado.features_omitidos)
+    props = calcular_propiedades(resultado.solido)
+    assert props["volumen_mm3"] < 100 * 60 * 10  # el chaflan si quito material
+
+
+def test_chaflan_angulo_distinto_a_45_se_omite_en_vez_de_cortarse_mal():
+    """cq.chamfer() solo puede garantizar un corte simetrico (45 grados)
+    sin saber de cual de las dos caras del corner se mide el angulo - un
+    chaflan a 30/60/etc grados modelado "a fuerzas" a 45 seria un STEP que
+    parece correcto pero mide mal. Debe omitirse, igual que escalon sin
+    profundidad, no cortarse con el angulo equivocado.
+    """
+    pieza = _placa_lisa_para_esquinas()
+    pieza.features.append(Feature(id="c30", tipo=TipoFeature.CHAFLAN, radio_mm=3, angulo_grados=30))
+    resultado = build_pieza(pieza)
+    assert any("c30" in o and "30" in o for o in resultado.features_omitidos)
+
+    # Y el volumen coincide exactamente con "sin ese chaflan" - no se corto nada por el.
+    props_con = calcular_propiedades(resultado.solido)
+    props_sin = calcular_propiedades(build_pieza(_placa_lisa_para_esquinas()).solido)
+    assert props_con["volumen_mm3"] == pytest.approx(props_sin["volumen_mm3"], abs=0.01)
+
+
 def test_saliente_agrega_material_no_lo_quita():
     """The whole point of `saliente` is being additive - a boss sticking
     UP off the top face. If this ever regressed to behaving like a cut

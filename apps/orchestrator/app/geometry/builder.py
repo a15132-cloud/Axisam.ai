@@ -322,7 +322,9 @@ def _arista_vertical_mas_cercana(solido: cq.Workplane, x: float, y: float):
     return min(aristas, key=distancia)
 
 
-def _aplicar_redondeos_chaflanes(solido: cq.Workplane, features: list[Feature], advertencias: list[str]) -> cq.Workplane:
+def _aplicar_redondeos_chaflanes(
+    solido: cq.Workplane, features: list[Feature], advertencias: list[str], omitidos: list[str]
+) -> cq.Workplane:
     """Must run before any hole/pocket cuts: only then are the vertical
     edges of the base ("|Z") exactly the outer corners, unambiguous to
     select. Cutting first would add hole-wall edges to the same selector.
@@ -345,11 +347,26 @@ def _aplicar_redondeos_chaflanes(solido: cq.Workplane, features: list[Feature], 
                 advertencias.append(f"No se pudo aplicar redondeo R{radio}mm en {etiqueta}: {exc}")
         elif f.tipo == TipoFeature.CHAFLAN:
             distancia = f.radio_mm or 2.0
+            # cq's chamfer() can do asymmetric legs (length, length2), but
+            # that needs to know WHICH of the two faces meeting at this
+            # corner the angle is measured from - the schema has no face
+            # reference for a plain chaflan (unlike chaflanes_compuestos,
+            # which is always face-to-bore on a hole), so there's no
+            # reliable way to turn `angulo_grados` into the right pair of
+            # leg lengths. Modeling a wrong angle silently is worse than
+            # not modeling it: omit instead of forcing 45 grados, exactly
+            # the same call made for `escalon` when profundidad_mm is
+            # missing - the human has to confirm the exact bevel manually
+            # rather than get a STEP with a corner that looks right but
+            # measures wrong.
             if f.angulo_grados and not math.isclose(f.angulo_grados, 45.0, abs_tol=1.0):
-                advertencias.append(
-                    f"Chaflan con angulo {f.angulo_grados} grados solicitado; el motor automatico solo "
-                    "soporta chaflan simetrico 45 grados en esta fase - se aplico a 45 grados."
+                omitidos.append(
+                    f"chaflan (id={f.id or '?'}) en {etiqueta}: pide {f.angulo_grados} grados, pero el motor "
+                    "automatico solo puede garantizar un chaflan simetrico de 45 grados sin adivinar de que "
+                    "cara se mide el angulo - se omitio en vez de cortar un angulo que podria estar mal. "
+                    f"Modela este chaflan de {distancia}mm x {f.angulo_grados} grados manualmente."
                 )
+                continue
             try:
                 solido = objetivo.chamfer(distancia)
             except Exception as exc:
@@ -383,7 +400,7 @@ def build_pieza(pieza: Pieza) -> BuildResult:
         for f in corner_features:
             omitidos.append(f"{f.tipo.value} (id={f.id or '?'}): solo soportado en piezas de base rectangular o poligonal")
     elif corner_features:
-        solido = _aplicar_redondeos_chaflanes(solido, corner_features, advertencias)
+        solido = _aplicar_redondeos_chaflanes(solido, corner_features, advertencias, omitidos)
 
     # Bosses/pads BEFORE any cutting feature: a pasante hole at the same
     # position must cut through the boss too, which only works if the

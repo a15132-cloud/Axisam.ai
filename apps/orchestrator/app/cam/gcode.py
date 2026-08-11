@@ -8,8 +8,12 @@ every decision here, straight from the project brief:
    canned cycles; rectangular pocket clearing; edge relief clearing;
    exterior contour offsets - see cam/toolpath_geometry.py) we generate
    real motion. Where it isn't (a feature type the geometry engine itself
-   couldn't build, or one missing a dimension it needs) we leave an
-   explicit comment placeholder, never invented G1/G2/G3 motion.
+   couldn't build, one missing a dimension it needs, or one whose real
+   cutting axis this generator can't safely assume - e.g. a barreno drilled
+   into a side face, see _es_barreno_lateral: its real axis is +/-X or
+   +/-Y, not Z, and needs machine reorientation this generator has no way
+   to know is available) we leave an explicit comment placeholder, never
+   invented G1/G2/G3 motion.
 2. Every file this function produces is stamped, top and bottom, as a
    simulation pending real Mastercam SDK verification. Capa 6 still
    requires human approval regardless, but the file itself must not be
@@ -79,7 +83,11 @@ def _pie_operacion(pp: dict, op) -> list[str]:
     return lineas
 
 
-def _bloque_taladrado(pp: dict, feature: Feature, op, espesor_pieza: float, tool_num: int) -> list[str]:
+def _es_barreno_lateral(feature: Feature) -> bool:
+    return bool(feature.cara and feature.cara.startswith("lateral"))
+
+
+def _bloque_taladrado(pp: dict, feature: Feature, op, espesor_pieza: float, tool_num: int) -> tuple[list[str], list[str]]:
     lineas = _encabezado_operacion(pp, feature, op, tool_num)
     profundidad = op.profundidad_pasada_mm or espesor_pieza
     z_objetivo = -abs(profundidad)
@@ -100,8 +108,48 @@ def _bloque_taladrado(pp: dict, feature: Feature, op, espesor_pieza: float, tool
     for pos in posiciones[1:]:
         lineas.append(f"X{pos.x:.3f} Y{pos.y:.3f}")
     lineas.append("G80")
+
+    advertencias_feature: list[str] = []
+    if feature.tipo == TipoFeature.BARRENO_ROSCADO:
+        # This cycle only ever cuts the PILOT hole (the tap-drill diameter
+        # rules.py already sized correctly from the machuelos catalog) -
+        # it is not a tapping cycle. A real rigid-tap cycle (G84) needs the
+        # thread's pitch to set the correct feed/rev relationship, and the
+        # schema only carries `rosca` as free text (not a validated pitch
+        # field), so generating G84 here would mean parsing an arbitrary
+        # string into a number that drives a physical tool - if that parse
+        # were ever wrong, this cycle would break a tap or ruin the thread.
+        # Emitting a real-looking G84 that's silently wrong is worse than
+        # what this used to do (nothing at all): flag it loud, in-file AND
+        # in advertencias, so a human adds the tapping operation instead of
+        # trusting this file to have roscado a hole it only drilled.
+        advertencias_feature.append(
+            f"barreno_roscado {feature.rosca or ''} (id={feature.id or '?'}): este archivo SOLO genero el "
+            "pretaladro - falta el ciclo de machuelo/roscado (G84 u equivalente). No lo uses para roscar sin "
+            "agregar esa operacion manualmente en Mastercam."
+        )
+    if feature.chaflanes_compuestos:
+        # The geometry engine DOES cut the multi-stage countersink into the
+        # STEP/STL (see app.geometry.builder._cortar_chaflanes_compuestos) -
+        # but nothing in this CAM layer knows about that field, so the
+        # G-code silently drills only the straight bore and never touches
+        # the countersink at all. A real countersink toolpath needs a tool
+        # matched to each stage's own half-angle, possibly several tool
+        # changes - genuine multi-operation CAM work, not something to
+        # improvise here. Disclose it exactly like the tapping gap above,
+        # rather than let a model that LOOKS fully machined (real motion,
+        # no warnings) silently leave the countersink unmachined.
+        etapas = ", ".join(f"{s.profundidad_mm}mm/{s.angulo_grados}g" for s in feature.chaflanes_compuestos)
+        advertencias_feature.append(
+            f"{feature.tipo.value} (id={feature.id or '?'}): tiene avellanado compuesto ({etapas}) modelado en "
+            "el STEP/STL, pero este archivo de codigo G SOLO taladro el barreno recto - el avellanado no tiene "
+            "trayectoria generada, requiere programarse manualmente en Mastercam con la herramienta de angulo correcta."
+        )
+    for advertencia in advertencias_feature:
+        lineas.append(_comentario(pp, "*** " + advertencia + " ***"))
+
     lineas.extend(_pie_operacion(pp, op))
-    return lineas
+    return lineas, advertencias_feature
 
 
 def _pasadas_z(profundidad_pasada: float, profundidad_total: float, z_top: float = 0.0) -> list[float]:
@@ -314,7 +362,7 @@ def _bloque_saliente(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int
     return lineas, True
 
 
-def _bloque_pendiente(pp: dict, feature: Feature, op) -> list[str]:
+def _bloque_pendiente(pp: dict, feature: Feature, op, razon: str | None = None) -> list[str]:
     return [
         _comentario(
             pp,
@@ -322,7 +370,7 @@ def _bloque_pendiente(pp: dict, feature: Feature, op) -> list[str]:
             f"HERRAMIENTA SUGERIDA: {op.herramienta.descripcion} - "
             f"RPM~{int(op.parametros.rpm)} F~{op.parametros.avance_mm_min:.0f}mm/min",
         ),
-        _comentario(pp, "TRAYECTORIA NO GENERADA - requiere Mastercam real o geometria no soportada aun"),
+        _comentario(pp, f"TRAYECTORIA NO GENERADA: {razon}" if razon else "TRAYECTORIA NO GENERADA - requiere Mastercam real o geometria no soportada aun"),
     ]
 
 
@@ -343,8 +391,38 @@ def generar_codigo_g(pieza: Pieza, plan: PlanDetallado, numero_programa: int = 1
     lineas_operaciones: list[str] = []
     tool_num = 1
     for feature, op in plan.operaciones_por_feature:
-        if feature.tipo in FEATURES_CON_CICLO_TALADRADO:
-            lineas_operaciones.extend(_bloque_taladrado(pp, feature, op, pieza.dimensiones.espesor_mm, tool_num))
+        if feature.tipo in FEATURES_CON_CICLO_TALADRADO and _es_barreno_lateral(feature):
+            # _bloque_taladrado only ever drills straight down -Z with a
+            # canned cycle (G81/G83) - correct for the overwhelming
+            # majority of barrenos, but geometrically wrong for one drilled
+            # into a side face (see app.geometry.builder.CARAS_LATERALES,
+            # added for real lateral-face drilling on the model side): the
+            # hole's real axis there is +/-X or +/-Y, not Z, and cutting it
+            # would need the machine reoriented (4th-axis indexer or an
+            # angle head) that this generator has no way to know is even
+            # available. Emitting a Z-down cycle at the hole's (x, y) would
+            # be real-looking G-code that cuts in the wrong place on the
+            # wrong axis - worse than not generating it. Route it to the
+            # same explicit "not generated" path as any other feature this
+            # generator genuinely can't route yet, exactly like a barreno
+            # missing a diametro would fall through elsewhere.
+            lineas_operaciones.extend(
+                _bloque_pendiente(
+                    pp,
+                    feature,
+                    op,
+                    razon=(
+                        f"perforacion en cara '{feature.cara}' - este generador solo produce ciclos de "
+                        "taladrado rectos en Z, requiere 4to eje/cabezal angular o programarse manualmente en Mastercam"
+                    ),
+                )
+            )
+            hubo_movimiento = False
+            sin_movimiento += 1
+        elif feature.tipo in FEATURES_CON_CICLO_TALADRADO:
+            bloque, advertencias_taladrado = _bloque_taladrado(pp, feature, op, pieza.dimensiones.espesor_mm, tool_num)
+            lineas_operaciones.extend(bloque)
+            advertencias.extend(advertencias_taladrado)
             con_movimiento += 1
             hubo_movimiento = True
         elif feature.tipo in FEATURES_CON_CAJERA:

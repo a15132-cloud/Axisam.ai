@@ -3,6 +3,7 @@ import { Sidebar, BotonNuevoProyecto } from "./components/layout/Sidebar";
 import { Header, type VistaMobile } from "./components/layout/Header";
 import { ChatPanel } from "./components/chat/ChatPanel";
 import { RightPanel } from "./components/pipeline/RightPanel";
+import { AxiscamLogo } from "./components/logo/AxiscamLogo";
 import { ModeloFlotante3D } from "./components/pipeline/ModeloFlotante3D";
 import { SimulacionEstandaloneView } from "./components/simulation/SimulacionEstandaloneView";
 import { api, ApiError } from "./lib/api";
@@ -335,7 +336,8 @@ function EmptyState({
   }
 
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 px-6 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+      <AxiscamLogo size={64} />
       <p className="text-sm text-[var(--color-text-muted)]">No tienes proyectos todavía.</p>
       <div className="w-full max-w-xs">
         <BotonNuevoProyecto creando={creando} onClick={onNuevoProyecto} />

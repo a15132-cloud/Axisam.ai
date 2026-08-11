@@ -8,7 +8,7 @@ import { ModeloFlotante3D } from "./components/pipeline/ModeloFlotante3D";
 import { SimulacionEstandaloneView } from "./components/simulation/SimulacionEstandaloneView";
 import { api, ApiError } from "./lib/api";
 import { derivarEntriesPipeline } from "./lib/deriveEntries";
-import type { BridgeWindowsStatus, ChatEntry, Pieza, Proyecto } from "./lib/types";
+import type { AlmacenamientoStatus, BridgeWindowsStatus, ChatEntry, Pieza, Proyecto } from "./lib/types";
 
 type Seccion = "proyectos" | "simulacion";
 
@@ -31,6 +31,7 @@ export default function App() {
   const [anthropicConfigurado, setAnthropicConfigurado] = useState<boolean | null>(null);
   const [backendAlcanzable, setBackendAlcanzable] = useState<boolean | null>(null);
   const [bridgeWindows, setBridgeWindows] = useState<BridgeWindowsStatus | null>(null);
+  const [almacenamiento, setAlmacenamiento] = useState<AlmacenamientoStatus | null>(null);
   const [cargandoInicial, setCargandoInicial] = useState(true);
   const [errorListaProyectos, setErrorListaProyectos] = useState(false);
   const [menuAbierto, setMenuAbierto] = useState(false);
@@ -50,6 +51,7 @@ export default function App() {
         setAnthropicConfigurado(h.anthropic_configurado);
         setBackendAlcanzable(true);
         setBridgeWindows(h.bridge_windows);
+        setAlmacenamiento(h.almacenamiento);
       })
       .catch(() => {
         setAnthropicConfigurado(false);
@@ -249,6 +251,17 @@ export default function App() {
             <code className="font-mono">VITE_API_BASE_URL</code> en Vercel no apunte a su URL
             correcta. Sigue la sección "Desplegar a producción" del README del proyecto — son 2
             pasos.
+          </div>
+        )}
+
+        {almacenamiento?.es_punto_de_montaje === false && (
+          <div className="border-b border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-3 text-center text-xs text-[var(--color-danger)]">
+            ⚠ El servidor NO tiene almacenamiento persistente conectado — los proyectos, planos, STEP,
+            STL y código G que generes AHORA se van a borrar en el próximo reinicio o redeploy del
+            backend. En Render, entra a tu servicio → Settings → confirma que el plan sea{" "}
+            <strong>"Starter"</strong> (no "Free") y que tenga un disco montado en{" "}
+            <code className="font-mono">/data</code> — ver el bloque <code className="font-mono">disk:</code>{" "}
+            de <code className="font-mono">render.yaml</code>.
           </div>
         )}
 

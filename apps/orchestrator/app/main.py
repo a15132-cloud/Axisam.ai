@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.api import routes_convert, routes_files, routes_kb, routes_projects
 from app.config import settings
 from app.integrations import windows_bridge
+from app.storage import files as storage
 
 app = FastAPI(
     title="Axiscam Orchestrator",
@@ -39,4 +40,5 @@ def health() -> dict:
         "capa4_mastercam": "trayectorias simuladas basadas en reglas - se usara Mastercam real automaticamente "
         "cuando el conector correspondiente este implementado en apps/windows-bridge (ver bridge_windows)",
         "bridge_windows": bridge,
+        "almacenamiento": storage.diagnostico_almacenamiento(),
     }

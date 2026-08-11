@@ -237,3 +237,13 @@ export interface BridgeWindowsStatus {
   version_mastercam?: string | null;
   detalle?: string | null;
 }
+
+// Reported by GET /api/health via app/storage/files.py::diagnostico_almacenamiento.
+// es_punto_de_montaje === false means proyectos/planos/STEP/STL/G-code live
+// on the container's own throwaway filesystem and get wiped on every
+// redeploy/restart - see render.yaml's disk: block and its comment.
+export interface AlmacenamientoStatus {
+  ruta: string;
+  es_punto_de_montaje: boolean | null;
+  advertencia: string | null;
+}

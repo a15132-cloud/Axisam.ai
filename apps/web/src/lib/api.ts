@@ -138,6 +138,11 @@ export const api = {
   eliminarProyecto: (id: string) => unwrap<{ eliminado: boolean }>(client.delete(`/projects/${id}`)),
   renombrarProyecto: (id: string, nombre: string) => unwrap<Proyecto>(client.put(`/projects/${id}/nombre`, { nombre })),
 
+  // Dos peticiones, no una - ver el docstring de extraer_primera_pasada en
+  // el backend (app/vision/extractor.py). subirPlano hace solo la primera
+  // pasada de Claude; verificarExtraccion hace la segunda (auditoria) por
+  // separado, para que ninguna peticion individual se acerque al limite de
+  // proxy de la plataforma de hosting.
   subirPlano: (id: string, archivo: File, instrucciones?: string) => {
     const form = new FormData();
     form.append("archivo", archivo);
@@ -149,6 +154,8 @@ export const api = {
       })
     );
   },
+  verificarExtraccion: (id: string) =>
+    unwrap<Proyecto>(client.post(`/projects/${id}/plano/verificar`, undefined, { timeout: TIMEOUT_LLAMADA_CLAUDE_MS })),
 
   editarPiezaExtraida: (id: string, pieza: Pieza) => unwrap<Proyecto>(client.put(`/projects/${id}/pieza-extraida`, pieza)),
   confirmarExtraccion: (id: string) => unwrap<Proyecto>(client.post(`/projects/${id}/confirmar-extraccion`)),

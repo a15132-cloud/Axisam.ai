@@ -140,10 +140,18 @@ export default function App() {
 
   async function subirArchivo(archivo: File, instrucciones: string) {
     if (!proyecto) return;
+    const proyectoId = proyecto.id;
     setSubiendo(true);
     try {
-      const actualizado = await api.subirPlano(proyecto.id, archivo, instrucciones || undefined);
-      aplicarProyecto(actualizado);
+      // Dos peticiones seguidas, no una - ver api.ts. La primera (primera
+      // pasada de Claude) y la segunda (verificacion/auditoria) se muestran
+      // como un solo "trabajando" continuo para el usuario; si la segunda
+      // falla, el backend ya cae de vuelta a la primera pasada en vez de
+      // perder la extraccion completa (ver verificar_plano en el backend).
+      const primeraPasada = await api.subirPlano(proyectoId, archivo, instrucciones || undefined);
+      aplicarProyecto(primeraPasada);
+      const verificado = await api.verificarExtraccion(proyectoId);
+      aplicarProyecto(verificado);
     } catch (err) {
       setMensajesLibres((prev) => [...prev, errorEntry(err, "No se pudo extraer la informacion del plano.")]);
     } finally {

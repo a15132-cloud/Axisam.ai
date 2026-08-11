@@ -16,6 +16,8 @@ from app.vision.extractor import (
     FormatoNoSoportado,
     _build_content_blocks,
     extraer_pieza_desde_plano,
+    extraer_primera_pasada,
+    verificar_segunda_pasada,
 )
 
 EJEMPLO_PIEZA_VALIDA = {
@@ -74,6 +76,17 @@ def test_extraccion_exitosa_con_imagen():
     assert resultado.pieza.material.nombre == "Aluminio 6061"
     # tool_choice must force the extraction tool, otherwise Claude could reply with plain text
     assert client.messages.last_call_kwargs["tool_choice"] == {"type": "tool", "name": "registrar_pieza_extraida"}
+
+
+def test_extraccion_imagen_sin_media_type_usa_extension_del_archivo():
+    """Needed for the verification pass's HTTP request (see
+    verificar_segunda_pasada), which re-reads the plano straight off disk -
+    there's no browser-supplied Content-Type at that point, just the
+    filename saved alongside the bytes.
+    """
+    bloques = _build_content_blocks(b"fake-png-bytes", "", "plano.png")
+    assert bloques[0]["type"] == "image"
+    assert bloques[0]["source"]["media_type"] == "image/png"
 
 
 def test_extraccion_pdf_usa_bloque_document():
@@ -164,3 +177,35 @@ def test_verificacion_fallida_no_pierde_la_primera_pasada():
     client = _FakeClient([EJEMPLO_PIEZA_VALIDA, None])  # second call returns no tool_use
     resultado = extraer_pieza_desde_plano(b"bytes", "image/png", "plano.png", client=client)
     assert resultado.pieza.pieza == "placa_soporte"
+
+
+def test_las_dos_pasadas_por_separado_dan_el_mismo_resultado_que_juntas():
+    """Regression test for the split introduced to keep each HTTP request
+    comfortably under a hosting platform's own proxy timeout (see the
+    docstrings on extraer_primera_pasada/verificar_segunda_pasada) - a real
+    upload landed right at the edge of Render's own request timeout with
+    both Claude calls inside one request, which the app has no way to
+    configure around since it isn't this app's own timeout setting. Calling
+    the two passes as separate functions (so routes_projects.py can expose
+    them as separate endpoints) must produce the exact same end result as
+    the combined convenience wrapper.
+    """
+    corregido = {**EJEMPLO_PIEZA_VALIDA, "pieza": "placa_soporte_corregida"}
+
+    client_junto = _FakeClient([EJEMPLO_PIEZA_VALIDA, corregido])
+    resultado_junto = extraer_pieza_desde_plano(b"bytes", "image/png", "plano.png", client=client_junto)
+
+    client_separado = _FakeClient([EJEMPLO_PIEZA_VALIDA, corregido])
+    primera = extraer_primera_pasada(b"bytes", "image/png", "plano.png", client=client_separado)
+    assert primera.pieza.pieza == "placa_soporte"  # first pass alone, not yet verified
+    segunda = verificar_segunda_pasada(b"bytes", "image/png", "plano.png", primera, client=client_separado)
+
+    assert segunda.pieza.pieza == resultado_junto.pieza.pieza == "placa_soporte_corregida"
+    assert len(client_separado.messages.llamadas) == 2
+
+
+def test_segunda_pasada_por_separado_tambien_absorbe_fallas():
+    client = _FakeClient([EJEMPLO_PIEZA_VALIDA, None])
+    primera = extraer_primera_pasada(b"bytes", "image/png", "plano.png", client=client)
+    segunda = verificar_segunda_pasada(b"bytes", "image/png", "plano.png", primera, client=client)
+    assert segunda.pieza.pieza == "placa_soporte"

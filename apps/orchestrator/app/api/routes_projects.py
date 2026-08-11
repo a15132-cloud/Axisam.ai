@@ -23,7 +23,7 @@ from app.schemas.piece import Pieza
 from app.schemas.project import Etapa, Proyecto
 from app.storage import files as storage
 from app.tools import handlers
-from app.vision.extractor import ExtraccionError, extraer_pieza_desde_plano
+from app.vision.extractor import ExtraccionError, ResultadoExtraccion, extraer_primera_pasada, verificar_segunda_pasada
 
 _logger = logging.getLogger(__name__)
 
@@ -131,6 +131,16 @@ def renombrar_proyecto(project_id: str, body: RenombrarProyectoBody) -> Proyecto
 
 @router.post("/{project_id}/plano")
 async def subir_plano(project_id: str, archivo: UploadFile = File(...), instrucciones: str | None = Form(None)) -> Proyecto:
+    """Only the FIRST Claude pass - see extraer_primera_pasada's docstring
+    for why. `proyecto.etapa` stays EXTRAYENDO (not
+    ESPERANDO_CONFIRMACION_EXTRACCION yet) so the frontend knows to call
+    POST .../plano/verificar next before showing the confirmation card;
+    `pieza_extraida` is set right away though, as a safety net - if the
+    second call never happens for any reason, the human still gets to
+    review and confirm the first pass's result instead of being stuck
+    (see derivarEntriesPipeline.ts on the frontend, which renders the
+    confirmation card off pieza_extraida directly, not off etapa).
+    """
     proyecto = _obtener_o_404(project_id)
     contenido = await archivo.read()
     storage.guardar_plano_subido(project_id, archivo.filename or "plano", contenido)
@@ -140,7 +150,7 @@ async def subir_plano(project_id: str, archivo: UploadFile = File(...), instrucc
     storage.guardar_proyecto(proyecto)
 
     try:
-        resultado = extraer_pieza_desde_plano(
+        resultado = extraer_primera_pasada(
             contenido, archivo.content_type or "", archivo.filename or "plano", instrucciones
         )
     except ExtraccionError as exc:
@@ -159,6 +169,54 @@ async def subir_plano(project_id: str, archivo: UploadFile = File(...), instrucc
         proyecto.registrar_evento("Error de Anthropic extrayendo datos del plano", detalle=str(exc))
         storage.guardar_proyecto(proyecto)
         raise _http_desde_error_anthropic(exc) from exc
+
+    proyecto.pieza_extraida = resultado.pieza
+    proyecto.registrar_evento(
+        "Primera pasada de extraccion completa, verificando...",
+        detalle=f"confianza {resultado.pieza.extraccion.confianza_global:.0%}",
+    )
+    storage.guardar_proyecto(proyecto)
+    return proyecto
+
+
+@router.post("/{project_id}/plano/verificar")
+def verificar_plano(project_id: str) -> Proyecto:
+    """The second, independent audit pass - see verificar_segunda_pasada's
+    docstring. Split into its own request (called right after .../plano
+    resolves, from the same "subiendo" UI state on the frontend) so each
+    individual HTTP request stays comfortably under any hosting platform's
+    own proxy timeout - two real Claude calls back to back inside ONE
+    request was landing right at that edge in practice, which no timeout
+    configured in this app's own code can work around because it isn't
+    this app's timeout to configure.
+    """
+    proyecto = _obtener_o_404(project_id)
+    if proyecto.pieza_extraida is None or not proyecto.archivo_plano:
+        raise HTTPException(
+            status_code=409, detail="No hay una primera pasada de extraccion todavia para verificar en este proyecto."
+        )
+
+    ruta_plano = storage.ruta_plano_subido(project_id, proyecto.archivo_plano)
+    if not ruta_plano.exists():
+        raise HTTPException(status_code=404, detail="No se encontro el archivo del plano guardado para verificar.")
+    contenido = ruta_plano.read_bytes()
+    primera_pasada = ResultadoExtraccion(pieza=proyecto.pieza_extraida, raw_tool_input={}, stop_reason="")
+
+    try:
+        resultado = verificar_segunda_pasada(contenido, "", proyecto.archivo_plano, primera_pasada)
+    except (ExtraccionError, anthropic.AnthropicError, RuntimeError) as exc:
+        # The review pass is a quality upgrade, not a hard requirement (see
+        # verificar_segunda_pasada) - a genuine failure here (network blip,
+        # rate limit) shouldn't strand a human with an otherwise-working
+        # first-pass result and no way to confirm it. Fall back to the
+        # first pass and say so, instead of erroring the whole upload.
+        _logger.warning("Fallo la segunda pasada de verificacion (proyecto %s): %s", project_id, exc)
+        resultado = primera_pasada
+        resultado.pieza.extraccion.notas = (
+            (resultado.pieza.extraccion.notas or "")
+            + "\n\n[La segunda pasada de verificacion no se pudo completar - este es el resultado de la primera "
+            "pasada sin auditar. Revisa con especial cuidado antes de confirmar.]"
+        ).strip()
 
     proyecto.pieza_extraida = resultado.pieza
     proyecto.etapa = Etapa.ESPERANDO_CONFIRMACION_EXTRACCION

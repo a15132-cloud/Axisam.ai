@@ -24,6 +24,13 @@ TOOL_NAME = "registrar_pieza_extraida"
 TOOL_DESCRIPTION = "Registra en formato estructurado la pieza extraida del plano de ingenieria."
 
 MEDIA_TYPES_IMAGEN = {"image/png", "image/jpeg", "image/jpg", "image/webp", "image/gif"}
+EXTENSION_A_MEDIA_TYPE_IMAGEN = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+    ".gif": "image/gif",
+}
 
 
 class ExtraccionError(Exception):
@@ -51,9 +58,16 @@ def _build_content_blocks(contenido: bytes, media_type: str, nombre_archivo: str
     tipo_normalizado = (media_type or "").lower()
     nombre_lower = nombre_archivo.lower()
 
-    if tipo_normalizado in MEDIA_TYPES_IMAGEN:
+    extension_imagen = next((ext for ext in EXTENSION_A_MEDIA_TYPE_IMAGEN if nombre_lower.endswith(ext)), None)
+    if tipo_normalizado in MEDIA_TYPES_IMAGEN or extension_imagen:
+        # Falls back to the extension when media_type is missing/generic -
+        # needed when re-reading an already-saved plano from disk (the
+        # verification pass's own HTTP request, see routes_projects.py)
+        # where there's no browser-supplied Content-Type to rely on anymore.
+        media_final = EXTENSION_A_MEDIA_TYPE_IMAGEN.get(extension_imagen, tipo_normalizado)
+        if media_final == "image/jpg":
+            media_final = "image/jpeg"
         b64 = base64.standard_b64encode(contenido).decode()
-        media_final = "image/jpeg" if tipo_normalizado == "image/jpg" else tipo_normalizado
         return [{"type": "image", "source": {"type": "base64", "media_type": media_final, "data": b64}}]
 
     if tipo_normalizado == "application/pdf" or nombre_lower.endswith(".pdf"):
@@ -158,13 +172,7 @@ def _verificar_y_refinar(
         return primera_pasada
 
 
-def extraer_pieza_desde_plano(
-    contenido: bytes,
-    media_type: str,
-    nombre_archivo: str,
-    instrucciones_usuario: str | None = None,
-    client: anthropic.Anthropic | None = None,
-) -> ResultadoExtraccion:
+def _cliente_anthropic(client: anthropic.Anthropic | None) -> anthropic.Anthropic:
     if not settings.anthropic_api_key and client is None:
         # RuntimeError, not ExtraccionError: this is an operator/deployment
         # misconfiguration (see app/api/routes_projects.py), not something
@@ -174,7 +182,37 @@ def extraer_pieza_desde_plano(
             "ANTHROPIC_API_KEY no esta configurada en el servidor - define esa variable de entorno "
             "en el despliegue del backend (ver render.yaml) para poder leer planos."
         )
+    # Same reasoning as app/agent/orchestrator.py::ejecutar_turno - more
+    # retry headroom for a shared key under concurrent load from many clients.
+    # timeout=60: the SDK's own default (600s) plus 5 retries has no
+    # realistic ceiling - a genuinely stuck call could hang long past
+    # whatever the frontend is willing to wait, so the user sees "nada
+    # pasa" while the backend is still silently retrying minutes later.
+    # 60s per attempt is generous for a single vision call (even with
+    # extended thinking) and keeps the worst case bounded and predictable
+    # instead of open-ended.
+    return client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5, timeout=60.0)
 
+
+def extraer_primera_pasada(
+    contenido: bytes,
+    media_type: str,
+    nombre_archivo: str,
+    instrucciones_usuario: str | None = None,
+    client: anthropic.Anthropic | None = None,
+) -> ResultadoExtraccion:
+    """Just the first Claude call (no verification pass) - split out from
+    extraer_pieza_desde_plano so app/api/routes_projects.py can run each
+    pass as its OWN HTTP request instead of one request blocking for both.
+    A real plano can take 20-40s per pass; two sequential calls inside a
+    single request landed right at the edge of Render's own proxy timeout
+    (independent of any timeout configured in this app's own code) - a
+    request that occasionally lands just past that limit gets killed by
+    the platform itself, and the client sees a bare 502 with no way to
+    tell "still working" from "actually failed". Splitting into two
+    requests keeps each one comfortably under any reasonable proxy limit.
+    """
+    active_client = _cliente_anthropic(client)
     content_blocks_plano = _build_content_blocks(contenido, media_type, nombre_archivo)
     content_blocks = list(content_blocks_plano)
     content_blocks.append(
@@ -186,17 +224,39 @@ def extraer_pieza_desde_plano(
             ),
         }
     )
+    return _llamar_registrar_pieza(active_client, SYSTEM_PROMPT, content_blocks)
 
-    # Same reasoning as app/agent/orchestrator.py::ejecutar_turno - more
-    # retry headroom for a shared key under concurrent load from many clients.
-    # timeout=60: the SDK's own default (600s) plus 5 retries has no
-    # realistic ceiling - a genuinely stuck call could hang long past
-    # whatever the frontend is willing to wait, so the user sees "nada
-    # pasa" while the backend is still silently retrying minutes later.
-    # 60s per attempt is generous for a single vision call (even with
-    # extended thinking) and keeps the worst case bounded and predictable
-    # instead of open-ended.
-    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5, timeout=60.0)
 
-    primera_pasada = _llamar_registrar_pieza(active_client, SYSTEM_PROMPT, content_blocks)
+def verificar_segunda_pasada(
+    contenido: bytes,
+    media_type: str,
+    nombre_archivo: str,
+    primera_pasada: ResultadoExtraccion,
+    client: anthropic.Anthropic | None = None,
+) -> ResultadoExtraccion:
+    """The independent audit pass, as its own function/HTTP call - see
+    extraer_primera_pasada's docstring for why this is split out. Rebuilds
+    the same content blocks from the plano bytes (cheap, local, no network
+    cost) since this runs as a genuinely separate request/process from the
+    first pass and can't rely on holding anything in memory between them.
+    """
+    active_client = _cliente_anthropic(client)
+    content_blocks_plano = _build_content_blocks(contenido, media_type, nombre_archivo)
     return _verificar_y_refinar(active_client, content_blocks_plano, primera_pasada)
+
+
+def extraer_pieza_desde_plano(
+    contenido: bytes,
+    media_type: str,
+    nombre_archivo: str,
+    instrucciones_usuario: str | None = None,
+    client: anthropic.Anthropic | None = None,
+) -> ResultadoExtraccion:
+    """Convenience wrapper that runs both passes back to back - used by
+    tests and any non-HTTP caller. The real upload endpoint calls
+    extraer_primera_pasada and verificar_segunda_pasada separately instead
+    (see their docstrings) so each one is its own HTTP request.
+    """
+    active_client = _cliente_anthropic(client)
+    primera_pasada = extraer_primera_pasada(contenido, media_type, nombre_archivo, instrucciones_usuario, active_client)
+    return verificar_segunda_pasada(contenido, media_type, nombre_archivo, primera_pasada, active_client)

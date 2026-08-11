@@ -106,7 +106,7 @@ def test_subir_plano_con_key_del_servidor_invalida_da_503_no_500(client, monkeyp
     def _falla(*args, **kwargs):
         raise _fake_auth_error()
 
-    monkeypatch.setattr(routes_projects_module, "extraer_pieza_desde_plano", _falla)
+    monkeypatch.setattr(routes_projects_module, "extraer_primera_pasada", _falla)
 
     project_id = _crear_proyecto(client)
     archivo = tmp_path / "plano.pdf"
@@ -128,7 +128,7 @@ def test_subir_plano_sin_key_configurada_en_servidor_da_mensaje_profesional(clie
     def _falla(*args, **kwargs):
         raise RuntimeError("ANTHROPIC_API_KEY no esta configurada en el servidor - ...")
 
-    monkeypatch.setattr(routes_projects_module, "extraer_pieza_desde_plano", _falla)
+    monkeypatch.setattr(routes_projects_module, "extraer_primera_pasada", _falla)
 
     project_id = _crear_proyecto(client)
     archivo = tmp_path / "plano.pdf"

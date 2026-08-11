@@ -189,7 +189,14 @@ def extraer_pieza_desde_plano(
 
     # Same reasoning as app/agent/orchestrator.py::ejecutar_turno - more
     # retry headroom for a shared key under concurrent load from many clients.
-    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5)
+    # timeout=60: the SDK's own default (600s) plus 5 retries has no
+    # realistic ceiling - a genuinely stuck call could hang long past
+    # whatever the frontend is willing to wait, so the user sees "nada
+    # pasa" while the backend is still silently retrying minutes later.
+    # 60s per attempt is generous for a single vision call (even with
+    # extended thinking) and keeps the worst case bounded and predictable
+    # instead of open-ended.
+    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5, timeout=60.0)
 
     primera_pasada = _llamar_registrar_pieza(active_client, SYSTEM_PROMPT, content_blocks)
     return _verificar_y_refinar(active_client, content_blocks_plano, primera_pasada)

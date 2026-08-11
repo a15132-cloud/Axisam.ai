@@ -20,7 +20,16 @@ if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
 // inactivo. Sin un timeout, una peticion en un celular con red inestable
 // puede quedarse colgada indefinidamente sin dar ningun error - el boton
 // que la disparo se ve "no cargado" para siempre en vez de fallar y avisar.
-const client = axios.create({ baseURL, timeout: 70000 });
+const client = axios.create({ baseURL, timeout: 90000 });
+
+// subirPlano y chat hacen una o dos llamadas REALES a Claude en el backend
+// (extraccion + verificacion, o el loop del agente) antes de responder -
+// cada intento ahi ahora tiene su propio limite de 60s en el backend (ver
+// app/vision/extractor.py y app/agent/orchestrator.py), asi que el timeout
+// del lado del navegador tiene que ser mayor a eso o corta la espera justo
+// cuando el backend sigue trabajando de verdad - eso es lo que se veia como
+// "no carga el plano" sin ser realmente un error.
+const TIMEOUT_LLAMADA_CLAUDE_MS = 180000;
 
 export class ApiError extends Error {
   status?: number;
@@ -133,7 +142,12 @@ export const api = {
     const form = new FormData();
     form.append("archivo", archivo);
     if (instrucciones) form.append("instrucciones", instrucciones);
-    return unwrap<Proyecto>(client.post(`/projects/${id}/plano`, form, { headers: { "Content-Type": "multipart/form-data" } }));
+    return unwrap<Proyecto>(
+      client.post(`/projects/${id}/plano`, form, {
+        headers: { "Content-Type": "multipart/form-data" },
+        timeout: TIMEOUT_LLAMADA_CLAUDE_MS,
+      })
+    );
   },
 
   editarPiezaExtraida: (id: string, pieza: Pieza) => unwrap<Proyecto>(client.put(`/projects/${id}/pieza-extraida`, pieza)),
@@ -165,7 +179,9 @@ export const api = {
     ),
 
   chat: (id: string, mensaje: string) =>
-    unwrap<{ proyecto: Proyecto; respuesta: string; herramientas_ejecutadas: string[] }>(client.post(`/projects/${id}/chat`, { mensaje })),
+    unwrap<{ proyecto: Proyecto; respuesta: string; herramientas_ejecutadas: string[] }>(
+      client.post(`/projects/${id}/chat`, { mensaje }, { timeout: TIMEOUT_LLAMADA_CLAUDE_MS })
+    ),
 
   archivoUrl: (id: string, nombre: string) => `${baseURL}/projects/${id}/files/${encodeURIComponent(nombre)}`,
   planoOriginalUrl: (id: string) => `${baseURL}/projects/${id}/plano-original`,

@@ -90,7 +90,11 @@ def ejecutar_turno(
     # on a healthy account - the SDK already retries those with exponential
     # backoff built in, this just gives it more attempts before the request
     # actually fails and the client sees the "no disponible" message.
-    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5)
+    # timeout=60: bounds each individual attempt so 5 retries has a
+    # predictable worst case instead of the SDK's much longer default
+    # compounding into a hang the frontend gives up on long before the
+    # backend does (see the same fix in app/vision/extractor.py).
+    active_client = client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5, timeout=60.0)
     mensajes: list[dict] = list(proyecto.mensajes)
     mensajes.append(
         {

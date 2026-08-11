@@ -24,6 +24,24 @@ class MaterialNoEncontrado(Exception):
     pass
 
 
+# Deliberately slow/safe for nearly any metal (softer materials just cut
+# less efficiently than they could - a tool steel or titanium cut at a
+# speed this conservative won't come close to damaging the tool or the
+# part). Used by planear_operacion as a last-resort fallback ONLY when
+# buscar_material genuinely can't resolve the material - see the real bug
+# this fixed: a features-skipped-silently failure produced an "approved"
+# G-code file with zero real motion because the whole feature loop bailed
+# out on the first MaterialNoEncontrado instead of still planning
+# something real, conservative, and loudly flagged as unverified.
+MATERIAL_GENERICO_CONSERVADOR: dict = {
+    "nombre_display": "Generico sin validar (material no reconocido en el catalogo)",
+    "familia": "desconocida",
+    "vc_recomendada_m_min": 15.0,
+    "avance_por_diente_mm": {"broca": 0.03, "fresa_carburo": 0.03},
+    "validado_por": None,
+}
+
+
 @dataclass
 class HerramientaSeleccionada:
     tipo: str
@@ -79,18 +97,47 @@ def normalizar_clave_material(nombre: str) -> str:
         .replace(" ", "_")
         .replace("-", "_")
         .replace(".", "")
+        .replace(",", "")
+        .replace("(", "")
+        .replace(")", "")
     )
 
 
 def buscar_material(material: Material) -> dict:
+    """Real bug found in production: Claude extracted a material as "Acero
+    SAE D2" (a completely reasonable, human-normal way to write it) - the
+    catalog key is "d2". Neither the exact-match nor the old substring
+    fallback caught this (the extracted name's tokens are in a different
+    order than the catalog's own nombre_display), so EVERY feature on the
+    piece silently got skipped in planear_trayectoria, producing a G-code
+    file with zero real operations - it looked "done" (no error shown to
+    the human) while not cutting a single hole. A close material-name
+    mismatch must never zero out an entire toolpath plan.
+    """
     materiales = _materiales()
     clave = normalizar_clave_material(material.nombre)
     if clave in materiales:
         return {"clave": clave, **materiales[clave]}
-    # fallback: match by substring on nombre_display (handles slight naming drift)
+
+    tokens_extraidos = set(clave.split("_"))
+    # A catalog key matches if ALL of its own tokens appear somewhere in the
+    # extracted name's tokens, regardless of order or extra words around it
+    # ("acero", "sae", designation numbers, etc.) - handles real-world
+    # naming drift like "Acero SAE D2" -> d2, or "Aluminio 6061-T6" ->
+    # aluminio_6061, without risking a bare "Acero" matching a specific
+    # grade it never actually named.
+    for k, v in materiales.items():
+        tokens_clave_catalogo = set(k.split("_"))
+        if tokens_clave_catalogo and tokens_clave_catalogo <= tokens_extraidos:
+            return {"clave": k, **v}
+
+    # fallback: match by substring on nombre_display (handles the opposite
+    # direction - the display name's own wording appears verbatim in what
+    # was extracted, even if the catalog key itself doesn't)
     for k, v in materiales.items():
         if clave in normalizar_clave_material(v["nombre_display"]):
             return {"clave": k, **v}
+
     raise MaterialNoEncontrado(
         f"Material '{material.nombre}' no esta en la base de conocimiento. "
         f"Materiales disponibles: {', '.join(sorted(materiales))}"
@@ -201,9 +248,20 @@ def planear_operacion(
     big to fit a tight boss - same failure mode CAJERA/RANURA already
     avoid by sizing from their own known dimensions.
     """
-    info_material = buscar_material(material)
     estrategia = seleccionar_estrategia(feature)
     notas: list[str] = []
+    try:
+        info_material = buscar_material(material)
+    except MaterialNoEncontrado as exc:
+        # A material this app can't recognize must NEVER mean "skip this
+        # feature entirely" - the caller (app/cam/planner.py) would then
+        # have zero operations for the whole piece, producing a G-code file
+        # with no real motion at all that still looks "approved". Plan the
+        # feature anyway with deliberately conservative, clearly-flagged
+        # parameters so real toolpath geometry exists for a human to
+        # review and correct, instead of a silent, empty file.
+        info_material = {"clave": "generico_no_reconocido", **MATERIAL_GENERICO_CONSERVADOR}
+        notas.append(f"{exc} Se uso un material generico con parametros de corte MUY conservadores en su lugar.")
 
     # These three warnings describe real gaps in what the CAM layer can
     # generate (see app/cam/gcode.py for the matching, more detailed notes

@@ -102,13 +102,12 @@ def planear_trayectoria(pieza: Pieza, postprocesador: str | None = None) -> Plan
         pp = rules.obtener_postprocesador()
 
     for feature in pieza.features:
-        try:
-            op = rules.planear_operacion(
-                feature, pieza.material, _espesor_efectivo(pieza, feature), _holgura_disponible_saliente(pieza, feature)
-            )
-        except rules.MaterialNoEncontrado as exc:
-            advertencias.append(str(exc))
-            continue
+        # rules.MaterialNoEncontrado no se propaga desde aqui - planear_operacion
+        # ya cae a un material generico conservador en vez de dejar sin
+        # planear la feature completa (ver su propio docstring).
+        op = rules.planear_operacion(
+            feature, pieza.material, _espesor_efectivo(pieza, feature), _holgura_disponible_saliente(pieza, feature)
+        )
 
         operaciones.append(op)
         operaciones_por_feature.append((feature, op))

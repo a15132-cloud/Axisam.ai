@@ -26,6 +26,25 @@ def test_buscar_material_desconocido_lanza_error():
         rules.buscar_material(Material(nombre="Unobtainium"))
 
 
+def test_buscar_material_con_texto_extra_como_lo_escribe_claude_real():
+    """Real bug caught live against the deployed backend: Claude extracted
+    the material as "Acero SAE D2" (completely normal, human-natural
+    phrasing) from a real customer drawing. Neither the exact-match nor
+    the old nombre_display-substring fallback caught it (the tokens are in
+    a different order than the catalog's own display string), so the ENTIRE
+    toolpath plan for a real 6-hole part came back with zero operations -
+    an "approved" G-code file that didn't cut a single hole, with no error
+    shown anywhere except a warning buried in advertencias.
+    """
+    info = rules.buscar_material(Material(nombre="Acero SAE D2"))
+    assert info["clave"] == "d2"
+
+
+def test_buscar_material_designacion_con_sufijo_de_temple():
+    info = rules.buscar_material(Material(nombre="Aluminio 6061-T6"))
+    assert info["clave"] == "aluminio_6061"
+
+
 def test_seleccionar_broca_exacta():
     h = rules.seleccionar_broca(8.0)
     assert h.diametro_mm == 8.0
@@ -62,6 +81,45 @@ def test_planear_operacion_material_no_validado_advierte():
     feature = Feature(tipo=TipoFeature.BARRENO, diametro_mm=8.0)
     op = rules.planear_operacion(feature, Material(nombre="Aluminio 6061"), espesor_pieza_mm=10.0)
     assert any("sin validar" in w for w in op.parametros.advertencias)
+
+
+def test_planear_operacion_material_desconocido_igual_planea_algo_real():
+    """The other half of the real bug fixed here: even a material that
+    truly isn't in the catalog (not just a naming-drift miss) must not
+    zero out the feature entirely - app/cam/planner.py used to catch
+    MaterialNoEncontrado and `continue`, skipping the feature, which for
+    a piece where EVERY feature shares the same unrecognized material
+    meant a G-code file with no real operations at all. A conservative,
+    loudly-flagged fallback must still produce a real, usable operation.
+    """
+    feature = Feature(tipo=TipoFeature.BARRENO, diametro_mm=8.0)
+    op = rules.planear_operacion(feature, Material(nombre="Unobtainium Exotico"), espesor_pieza_mm=10.0)
+
+    assert op.herramienta.diametro_mm == 8.0
+    assert op.parametros.rpm > 0
+    assert any("Unobtainium Exotico" in n and "generico" in n for n in op.notas)
+    assert any("sin validar" in w for w in op.parametros.advertencias)
+
+
+def test_planear_trayectoria_no_queda_vacia_por_material_desconocido():
+    """Same bug, at the layer the user actually sees: a full piece plan
+    must still produce real operations (and thus real G-code motion) even
+    when the material can't be resolved at all - not zero operations that
+    quietly render an "approved" file useless.
+    """
+    from app.cam.planner import planear_trayectoria
+    from app.schemas.piece import Dimensiones, FormaBase, Pieza, Posicion2D
+
+    pieza = Pieza(
+        pieza="pieza_material_raro",
+        material=Material(nombre="Unobtainium Exotico"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[Feature(tipo=TipoFeature.BARRENO, diametro_mm=8.0, posicion=Posicion2D(x=50, y=30))],
+    )
+    plan = planear_trayectoria(pieza)
+
+    assert len(plan.operaciones) == 1
+    assert any("Unobtainium Exotico" in w for w in plan.plan.advertencias)
 
 
 def test_planear_operacion_saliente_recomienda_herramienta_real():

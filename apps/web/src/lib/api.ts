@@ -59,8 +59,23 @@ function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
       if (err?.message === "Network Error") {
         throw new ApiError("No se pudo conectar con el servidor. Revisa tu conexión a internet e intenta de nuevo.");
       }
+      const status = err?.response?.status;
+      // 502/503/504 are gateway/proxy-level errors (Render restarting,
+      // deploying, or briefly overloaded) - the response body at that layer
+      // is Render's own raw error page (plain text/HTML, e.g. "502 Bad
+      // Gateway ... Request ID: ..."), never something this app wrote. That
+      // raw text must NEVER reach the chat verbatim - a non-technical user
+      // has no way to act on "Request ID: a298dcaa..." - so these three
+      // codes always get the same clear, actionable message regardless of
+      // whatever text happened to be in the response body.
+      if (status === 502 || status === 503 || status === 504) {
+        throw new ApiError(
+          "El servidor no respondió a tiempo (puede estar reiniciando o despertando tras estar inactivo). Espera unos segundos y vuelve a intentar - tu plano/proyecto no se perdió.",
+          status
+        );
+      }
       const detail = err?.response?.data?.detail;
-      throw new ApiError(typeof detail === "string" ? detail : err.message, err?.response?.status);
+      throw new ApiError(typeof detail === "string" ? detail : err.message, status);
     });
 }
 

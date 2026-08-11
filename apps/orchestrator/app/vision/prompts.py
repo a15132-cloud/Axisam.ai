@@ -33,6 +33,16 @@ mencionalo de pasada en `extraccion.notas` si aporta contexto util. Reservar las
 verdad para lo que sí importa es lo que hace que un humano bajo presion las lea con atencion en vez
 de aprender a ignorarlas por costumbre.
 
+UN CALCULO EXACTO YA ES CONFIRMACION - no le bajes la confianza por no tener una segunda vista que
+lo repita. Si derivaste una medida de una cadena de cotas que SI reconcilia exacto (la suma da la
+cota total sin residuo, sin ambiguedad de que numeros entran en la cadena), esa es una medida
+encontrada, no una adivinada - no la mandes a `campos_baja_confianza` solo porque no hay ademas una
+vista independiente (una vista de planta separada, otro corte) que la repita. Eso es pedir una
+segunda fuente para algo que la aritmetica ya resolvio sin duda real - equivale a redescubrir la
+misma pregunta que ya te respondiste tu mismo un parrafo antes. Reserva `campos_baja_confianza`
+para cuando SI haya una razon real de dudar: la cadena no cuadra, dos cotas se contradicen entre
+si, o un numero es ilegible - no para "esto lo calcule bien pero nadie mas lo confirmo".
+
 COMO LEER EL PLANO:
 1. Identifica todas las vistas presentes (frontal, superior, lateral, isometrica, cortes/secciones)
    y correlaciona las cotas entre vistas - una medida puede aparecer en una vista y no en otra.
@@ -203,13 +213,16 @@ NO es re-extraer desde cero - es auditar activamente lo que ya existe, buscando 
    explicito disponible - y que las etiquetas escritas con flecha (tipo de rosca, soldadura, tipo
    de union, etc.) quedaron registradas en el campo del feature correspondiente, no perdidas sueltas
    solo en `extraccion.notas`.
-8. PREGUNTAS QUE NO CAMBIAN NADA: revisa cada entrada de `campos_baja_confianza` de la primera
-   pasada con la pregunta "si el humano se equivoca al resolver esto, ¿el STEP o el codigo G salen
-   diferentes?" (ver regla del prompt de extraccion). Si encuentras una donde la respuesta es no -
-   dos opciones simetricas/identicas donde solo cambia una etiqueta, no la geometria real - quitala
-   de `campos_baja_confianza` (resuelvela tu mismo, cualquiera de las opciones vale) en vez de
-   dejarla ahi. Cada pregunta de mas que no importa hace que las que si importan se lean con menos
-   atencion.
+8. PREGUNTAS QUE NO CAMBIAN NADA (o que ya se resolvieron con calculo exacto): revisa cada entrada
+   de `campos_baja_confianza` de la primera pasada con la pregunta "si el humano se equivoca al
+   resolver esto, ¿el STEP o el codigo G salen diferentes?" (ver regla del prompt de extraccion).
+   Si la respuesta es no - dos opciones simetricas/identicas donde solo cambia una etiqueta, no la
+   geometria real - quitala de `campos_baja_confianza` (resuelvela tu mismo, cualquiera de las
+   opciones vale). Tambien quita cualquier entrada donde las propias `notas` de la primera pasada
+   ya muestran una cadena de cotas que reconcilia exacto (suma sin residuo) para esa medida - si tu
+   propio texto dice "no hay razon real para dudar" y la sigues dejando en baja confianza de todos
+   modos, es una contradiccion: bórrala de la lista, la aritmetica ya fue la confirmacion. Cada
+   pregunta de mas que no importa hace que las que si importan se lean con menos atencion.
 
 Cuando corrijas el JSON, parte del JSON que recibiste y modificalo - no lo reconstruyas desde
 cero. `campos_baja_confianza` y `notas` de la primera pasada casi siempre siguen siendo validos;

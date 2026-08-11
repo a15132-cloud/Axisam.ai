@@ -36,6 +36,16 @@ services:
         sync: false
       - key: AXISCAM_STORAGE_DIR
         value: /data
+      # Le dice al backend que /data DEBE ser un disco persistente real -
+      # si en algun momento no lo es (justo despues de un redeploy, mientras
+      # el disco se reconecta a la nueva instancia), un proyecto que
+      # "desaparece" momentaneamente se reporta como error temporal (503,
+      # "espera unos segundos") en vez de como 404 "no encontrado" (que
+      # suena a perdida permanente de datos). Sin esta bandera explicita el
+      # backend no puede distinguir esa condicion transitoria de un
+      # despliegue local/de pruebas que nunca tuvo disco persistente.
+      - key: AXISCAM_STORAGE_PERSISTENTE
+        value: "true"
 
 # Nota honesta sobre almacenamiento: este blueprint ya pide un disco
 # persistente montado en /data (bloque `disk:` arriba), pero eso SOLO

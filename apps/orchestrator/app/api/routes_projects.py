@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from app.agent import approval
 from app.agent.orchestrator import ejecutar_turno
+from app.config import settings
 from app.geometry.builder import GeometryBuildError
 from app.integrations import windows_bridge
 from app.schemas.piece import Pieza
@@ -90,6 +91,25 @@ def _obtener_o_404(project_id: str) -> Proyecto:
     try:
         return storage.cargar_proyecto(project_id)
     except FileNotFoundError as exc:
+        # A project that genuinely never existed (or was deleted) and one
+        # this instance can't see right now because its persistent disk
+        # hasn't finished (re)attaching after a deploy/restart raise the
+        # exact same FileNotFoundError - but they need different messages.
+        # "no encontrado" reads as permanent data loss to a non-technical
+        # user; the real situation for the second case is "wait a few
+        # seconds, it's still there." Tell them apart with the same st_dev
+        # check diagnostico_almacenamiento() uses, and only widen the
+        # message when there's positive evidence storage isn't the real
+        # mount right now - never on a plain "file isn't there".
+        if settings.storage_dir_debe_ser_persistente and storage.diagnostico_almacenamiento()["es_punto_de_montaje"] is False:
+            raise HTTPException(
+                status_code=503,
+                detail=(
+                    "El almacenamiento del servidor todavia se esta reconectando (esto pasa justo despues "
+                    "de una actualizacion del servidor). Tu proyecto no se perdio - espera unos segundos y "
+                    "vuelve a intentar."
+                ),
+            ) from exc
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 

@@ -72,8 +72,8 @@ async function diagnosticarNetworkError(): Promise<string> {
   }
 }
 
-function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
-  return promise
+function unwrap<T>(fn: () => Promise<{ data: T }>, reintentosRestantes = 1): Promise<T> {
+  return fn()
     .then((res) => {
       // A misconfigured VITE_API_BASE_URL (or a rewrite that catches
       // unmatched paths - see vercel.json) can make an "/api/..." request
@@ -110,6 +110,19 @@ function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
       // has no way to act on "Request ID: a298dcaa..." - so these three
       // codes always get the same clear, actionable message regardless of
       // whatever text happened to be in the response body.
+      if (status === 503 && reintentosRestantes > 0) {
+        // 503 aqui siempre significa una condicion que el backend mismo ya
+        // identifico como transitoria (almacenamiento reconectando tras una
+        // actualizacion del servidor, servicio despertando) - ver
+        // _obtener_o_404 en routes_projects.py. Un reintento automatico
+        // despues de una pausa corta resuelve la enorme mayoria sin que el
+        // usuario vea nada, en vez de un error confuso por algo que se
+        // arregla solo en un par de segundos. Nunca se reintenta on 502/504
+        // (timeouts genuinos de un intento que de verdad tardo demasiado -
+        // reintentar de inmediato ahi solo duplicaria la espera).
+        await new Promise((resolve) => setTimeout(resolve, 3000));
+        return unwrap(fn, reintentosRestantes - 1);
+      }
       if (status === 502 || status === 503 || status === 504) {
         throw new ApiError(
           "El servidor no respondió a tiempo (puede estar reiniciando o despertando tras estar inactivo). Espera unos segundos y vuelve a intentar - tu plano/proyecto no se perdió.",
@@ -130,13 +143,13 @@ export const api = {
       capa4_mastercam: string;
       bridge_windows: BridgeWindowsStatus | null;
       almacenamiento: AlmacenamientoStatus;
-    }>(client.get("/health")),
+    }>(() => client.get("/health")),
 
-  crearProyecto: (nombre: string) => unwrap<Proyecto>(client.post("/projects", { nombre })),
-  listarProyectos: () => unwrap<Proyecto[]>(client.get("/projects")),
-  obtenerProyecto: (id: string) => unwrap<Proyecto>(client.get(`/projects/${id}`)),
-  eliminarProyecto: (id: string) => unwrap<{ eliminado: boolean }>(client.delete(`/projects/${id}`)),
-  renombrarProyecto: (id: string, nombre: string) => unwrap<Proyecto>(client.put(`/projects/${id}/nombre`, { nombre })),
+  crearProyecto: (nombre: string) => unwrap<Proyecto>(() => client.post("/projects", { nombre })),
+  listarProyectos: () => unwrap<Proyecto[]>(() => client.get("/projects")),
+  obtenerProyecto: (id: string) => unwrap<Proyecto>(() => client.get(`/projects/${id}`)),
+  eliminarProyecto: (id: string) => unwrap<{ eliminado: boolean }>(() => client.delete(`/projects/${id}`)),
+  renombrarProyecto: (id: string, nombre: string) => unwrap<Proyecto>(() => client.put(`/projects/${id}/nombre`, { nombre })),
 
   // Dos peticiones, no una - ver el docstring de extraer_primera_pasada en
   // el backend (app/vision/extractor.py). subirPlano hace solo la primera
@@ -147,7 +160,7 @@ export const api = {
     const form = new FormData();
     form.append("archivo", archivo);
     if (instrucciones) form.append("instrucciones", instrucciones);
-    return unwrap<Proyecto>(
+    return unwrap<Proyecto>(() =>
       client.post(`/projects/${id}/plano`, form, {
         headers: { "Content-Type": "multipart/form-data" },
         timeout: TIMEOUT_LLAMADA_CLAUDE_MS,
@@ -155,38 +168,44 @@ export const api = {
     );
   },
   verificarExtraccion: (id: string) =>
-    unwrap<Proyecto>(client.post(`/projects/${id}/plano/verificar`, undefined, { timeout: TIMEOUT_LLAMADA_CLAUDE_MS })),
+    unwrap<Proyecto>(() => client.post(`/projects/${id}/plano/verificar`, undefined, { timeout: TIMEOUT_LLAMADA_CLAUDE_MS })),
 
-  editarPiezaExtraida: (id: string, pieza: Pieza) => unwrap<Proyecto>(client.put(`/projects/${id}/pieza-extraida`, pieza)),
-  confirmarExtraccion: (id: string) => unwrap<Proyecto>(client.post(`/projects/${id}/confirmar-extraccion`)),
+  editarPiezaExtraida: (id: string, pieza: Pieza) => unwrap<Proyecto>(() => client.put(`/projects/${id}/pieza-extraida`, pieza)),
+  // reintentosRestantes=2 (en vez del default de 1) en la cadena
+  // confirmar-extraccion -> generar-modelo-3d especificamente: es exactamente
+  // la secuencia donde se vio en vivo el "Proyecto no encontrado" reportado
+  // por un usuario real, justo despues de una actualizacion del servidor
+  // mientras seguia usando la app (ver _obtener_o_404 en el backend).
+  confirmarExtraccion: (id: string) => unwrap<Proyecto>(() => client.post(`/projects/${id}/confirmar-extraccion`), 2),
 
   generarModelo3D: (id: string) =>
     unwrap<{ proyecto: Proyecto; propiedades_geometricas: Record<string, unknown>; advertencias: string[]; features_omitidos: string[]; archivos_generados: string[] }>(
-      client.post(`/projects/${id}/generar-modelo-3d`)
+      () => client.post(`/projects/${id}/generar-modelo-3d`),
+      2
     ),
-  confirmarModelo: (id: string) => unwrap<Proyecto>(client.post(`/projects/${id}/confirmar-modelo`)),
+  confirmarModelo: (id: string) => unwrap<Proyecto>(() => client.post(`/projects/${id}/confirmar-modelo`), 2),
 
   generarTrayectorias: (id: string, postprocesador?: string) =>
-    unwrap<{ proyecto: Proyecto; plan: Proyecto["toolpath_plan"]; postprocesador: string }>(
+    unwrap<{ proyecto: Proyecto; plan: Proyecto["toolpath_plan"]; postprocesador: string }>(() =>
       client.post(`/projects/${id}/generar-trayectorias`, { postprocesador })
     ),
 
   simularMaquinado: (id: string) =>
-    unwrap<{ proyecto: Proyecto; simulacion: Proyecto["simulacion"] }>(client.post(`/projects/${id}/simular-maquinado`)),
+    unwrap<{ proyecto: Proyecto; simulacion: Proyecto["simulacion"] }>(() => client.post(`/projects/${id}/simular-maquinado`)),
 
-  activarSolidworks: (id: string) => unwrap<{ activado: boolean }>(client.post(`/projects/${id}/activar-solidworks`)),
-  abrirMastercam: (id: string) => unwrap<{ abierto: boolean }>(client.post(`/projects/${id}/abrir-mastercam`)),
+  activarSolidworks: (id: string) => unwrap<{ activado: boolean }>(() => client.post(`/projects/${id}/activar-solidworks`)),
+  abrirMastercam: (id: string) => unwrap<{ abierto: boolean }>(() => client.post(`/projects/${id}/abrir-mastercam`)),
 
-  aprobarFinal: (id: string, aprobado_por: string) => unwrap<Proyecto>(client.post(`/projects/${id}/aprobar-final`, { aprobado_por })),
-  rechazar: (id: string, motivo?: string) => unwrap<Proyecto>(client.post(`/projects/${id}/rechazar`, { motivo })),
+  aprobarFinal: (id: string, aprobado_por: string) => unwrap<Proyecto>(() => client.post(`/projects/${id}/aprobar-final`, { aprobado_por })),
+  rechazar: (id: string, motivo?: string) => unwrap<Proyecto>(() => client.post(`/projects/${id}/rechazar`, { motivo })),
 
   exportarCodigoG: (id: string) =>
     unwrap<{ proyecto: Proyecto; archivo: string; operaciones_con_movimiento_real: number; operaciones_solo_planeadas: number; advertencias: string[] }>(
-      client.post(`/projects/${id}/exportar-codigo-g`)
+      () => client.post(`/projects/${id}/exportar-codigo-g`)
     ),
 
   chat: (id: string, mensaje: string) =>
-    unwrap<{ proyecto: Proyecto; respuesta: string; herramientas_ejecutadas: string[] }>(
+    unwrap<{ proyecto: Proyecto; respuesta: string; herramientas_ejecutadas: string[] }>(() =>
       client.post(`/projects/${id}/chat`, { mensaje }, { timeout: TIMEOUT_LLAMADA_CLAUDE_MS })
     ),
 
@@ -234,8 +253,8 @@ export const api = {
     }
   },
 
-  materiales: () => unwrap<MaterialKB[]>(client.get("/knowledge-base/materiales")),
-  postprocesadores: () => unwrap<PostprocesadorKB[]>(client.get("/knowledge-base/postprocesadores")),
+  materiales: () => unwrap<MaterialKB[]>(() => client.get("/knowledge-base/materiales")),
+  postprocesadores: () => unwrap<PostprocesadorKB[]>(() => client.get("/knowledge-base/postprocesadores")),
 
   convertirStepAStl: async (archivo: File): Promise<Blob> => {
     const form = new FormData();

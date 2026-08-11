@@ -1,11 +1,12 @@
-import { FileText, PackageCheck } from "lucide-react";
+import { useEffect, useState } from "react";
+import { FileText, Loader2, PackageCheck } from "lucide-react";
 import { Card, CardHeader } from "../common/Card";
 import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
 import { ActividadTimeline } from "./ActividadTimeline";
 import { StlViewer } from "../viewer/StlViewer";
 import { ErrorBoundary } from "../system/ErrorBoundary";
-import { api } from "../../lib/api";
+import { api, ApiError } from "../../lib/api";
 import type { Proyecto } from "../../lib/types";
 
 const IMAGE_EXT = [".png", ".jpg", ".jpeg", ".webp", ".gif"];
@@ -73,14 +74,8 @@ export function RightPanel({ proyecto }: { proyecto: Proyecto }) {
         <Card delay={0.05}>
           <CardHeader title="Plano subido" subtitle={nombrePlano} />
           <div className="p-4">
-            {esImagen ? (
-              <img
-                src={api.planoOriginalUrl(proyecto.id)}
-                alt="Plano subido"
-                className="max-h-80 w-full rounded-lg border border-[var(--color-border)] object-contain bg-white"
-              />
-            ) : esPdf ? (
-              <iframe src={api.planoOriginalUrl(proyecto.id)} title="Plano PDF" className="h-80 w-full rounded-lg border border-[var(--color-border)]" />
+            {esImagen || esPdf ? (
+              <PlanoOriginalPreview proyectoId={proyecto.id} esImagen={esImagen} />
             ) : (
               <a
                 href={api.planoOriginalUrl(proyecto.id)}
@@ -121,5 +116,59 @@ function Row({ label, value, mono }: { label: string; value: string; mono?: bool
       <span className="text-[var(--color-text-faint)]">{label}</span>
       <span className={`font-medium text-[var(--color-text)] ${mono ? "font-mono" : ""}`}>{value}</span>
     </div>
+  );
+}
+
+/**
+ * Fetches the plano through the app's own error handling (see
+ * api.obtenerPlanoOriginalBlob) instead of pointing an <img>/<iframe> src=
+ * straight at the backend - a native browser resource load like that
+ * bypasses every bit of network/CORS/gateway-error handling this app has,
+ * so a transient 502 used to render as Render's own raw error page sitting
+ * right where the user expects to see the file they uploaded. A blob is
+ * either fully there or a clean ApiError - nothing in between ever reaches
+ * the DOM as "content".
+ */
+function PlanoOriginalPreview({ proyectoId, esImagen }: { proyectoId: string; esImagen: boolean }) {
+  const [blobUrl, setBlobUrl] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let url: string | null = null;
+    let cancelado = false;
+    setBlobUrl(null);
+    setError(null);
+    api
+      .obtenerPlanoOriginalBlob(proyectoId)
+      .then((blob) => {
+        if (cancelado) return;
+        url = URL.createObjectURL(blob);
+        setBlobUrl(url);
+      })
+      .catch((err) => {
+        if (!cancelado) setError(err instanceof ApiError ? err.message : "No se pudo cargar el plano original.");
+      });
+    return () => {
+      cancelado = true;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [proyectoId]);
+
+  if (error) {
+    return <p className="rounded-lg border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 p-3 text-xs text-[var(--color-danger)]">{error}</p>;
+  }
+
+  if (!blobUrl) {
+    return (
+      <div className="flex h-40 items-center justify-center gap-2 rounded-lg border border-[var(--color-border)] text-xs text-[var(--color-text-faint)]">
+        <Loader2 className="h-4 w-4 animate-spin" /> Cargando plano...
+      </div>
+    );
+  }
+
+  return esImagen ? (
+    <img src={blobUrl} alt="Plano subido" className="max-h-80 w-full rounded-lg border border-[var(--color-border)] object-contain bg-white" />
+  ) : (
+    <iframe src={blobUrl} title="Plano PDF" className="h-80 w-full rounded-lg border border-[var(--color-border)]" />
   );
 }

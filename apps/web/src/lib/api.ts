@@ -171,6 +171,46 @@ export const api = {
   planoOriginalUrl: (id: string) => `${baseURL}/projects/${id}/plano-original`,
   descargarTodoUrl: (id: string) => `${baseURL}/projects/${id}/descargar-todo`,
 
+  // Fetches the plano as a blob through the same axios client/error handling
+  // as everything else, instead of handing its raw URL straight to an
+  // <iframe>/<img src>. A direct src= is a native browser request that
+  // completely bypasses unwrap()/diagnosticarNetworkError() - if the backend
+  // 502s (cold start, redeploy) an <iframe> just renders Render's own raw
+  // error page as if it were the plano's content, exactly where the user
+  // expects to see the file they uploaded. Fetching it as a blob first means
+  // a failure surfaces as the same clean, actionable ApiError message used
+  // everywhere else, never raw HTML in the one place it's most confusing.
+  obtenerPlanoOriginalBlob: async (id: string): Promise<Blob> => {
+    try {
+      const res = await client.get(`/projects/${id}/plano-original`, { responseType: "blob" });
+      return res.data as Blob;
+    } catch (err) {
+      const axiosErr = err as { response?: { data?: unknown; status?: number }; message?: string; code?: string };
+      const status = axiosErr.response?.status;
+      if (axiosErr.code === "ECONNABORTED" || /timeout/i.test(axiosErr.message ?? "")) {
+        throw new ApiError("El servidor está tardando más de lo normal en responder. Intenta de nuevo en unos segundos.");
+      }
+      if (axiosErr.message === "Network Error") {
+        throw new ApiError(await diagnosticarNetworkError());
+      }
+      if (status === 502 || status === 503 || status === 504) {
+        throw new ApiError(
+          "El servidor no respondió a tiempo (puede estar reiniciando o despertando). Espera unos segundos y vuelve a intentar.",
+          status
+        );
+      }
+      let detalle: string | undefined;
+      if (axiosErr.response?.data instanceof Blob) {
+        try {
+          detalle = JSON.parse(await axiosErr.response.data.text())?.detail;
+        } catch {
+          /* not JSON - fall through to generic message */
+        }
+      }
+      throw new ApiError(detalle ?? "No se pudo cargar el plano original.", status);
+    }
+  },
+
   materiales: () => unwrap<MaterialKB[]>(client.get("/knowledge-base/materiales")),
   postprocesadores: () => unwrap<PostprocesadorKB[]>(client.get("/knowledge-base/postprocesadores")),
 

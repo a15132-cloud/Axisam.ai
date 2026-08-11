@@ -30,6 +30,39 @@ export class ApiError extends Error {
   }
 }
 
+// Browsers deliberately hide the REASON a cross-origin request failed from
+// JavaScript (a security feature, not a bug) - axios/fetch both just see
+// "Network Error" whether the server is genuinely unreachable (down, wrong
+// URL, DNS) or perfectly healthy but blocking this origin via CORS
+// (AXISCAM_CORS_ORIGINS misconfigured). Those need completely different
+// fixes, but the generic message can't tell a non-technical user which one
+// they're looking at - "revisa tu internet" is actively wrong advice when
+// it's really a CORS mismatch, which is what made that message so
+// frustrating to a user who correctly knows their internet is fine.
+//
+// The workaround: a `mode: "no-cors"` fetch to the SAME url still performs
+// the real network request (DNS, TCP, TLS) - it only refuses to let JS
+// read the response body/headers. So it resolves if the server answered
+// at all (CORS blocked reading the answer, not the network), and rejects
+// only if the network layer itself failed. That one bit of signal is
+// enough to tell the two cases apart and give each its own real fix.
+async function diagnosticarNetworkError(): Promise<string> {
+  try {
+    await fetch(`${baseURL}/health`, { mode: "no-cors", signal: AbortSignal.timeout(6000) });
+    return (
+      "El servidor SÍ está encendido y respondió, pero está rechazando la conexión desde este sitio " +
+      "(configuración CORS/AXISCAM_CORS_ORIGINS en el backend no incluye este dominio). No es tu internet - " +
+      "esto lo tiene que corregir quien administra el servidor."
+    );
+  } catch {
+    return (
+      "No se pudo contactar al servidor en absoluto (puede estar apagado, redesplegando, o la dirección " +
+      "configurada está mal) - no parece ser tu conexión a internet. Espera un minuto e intenta de nuevo; " +
+      "si sigue igual, quien administra el servidor debe revisarlo."
+    );
+  }
+}
+
 function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
   return promise
     .then((res) => {
@@ -49,7 +82,7 @@ function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
       }
       return res.data;
     })
-    .catch((err) => {
+    .catch(async (err) => {
       if (err instanceof ApiError) throw err;
       if (err?.code === "ECONNABORTED" || /timeout/i.test(err?.message ?? "")) {
         throw new ApiError(
@@ -57,7 +90,7 @@ function unwrap<T>(promise: Promise<{ data: T }>): Promise<T> {
         );
       }
       if (err?.message === "Network Error") {
-        throw new ApiError("No se pudo conectar con el servidor. Revisa tu conexión a internet e intenta de nuevo.");
+        throw new ApiError(await diagnosticarNetworkError());
       }
       const status = err?.response?.status;
       // 502/503/504 are gateway/proxy-level errors (Render restarting,

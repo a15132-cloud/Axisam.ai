@@ -277,6 +277,8 @@ export default function App() {
                     puedeChatear={!!anthropicConfigurado}
                     enviando={enviando}
                     subiendo={subiendo}
+                    generandoModelo={confirmandoExtraccion}
+                    generandoTrayectorias={confirmandoModelo}
                     onEnviarMensaje={enviarMensaje}
                     onSubirArchivo={subirArchivo}
                     actions={{

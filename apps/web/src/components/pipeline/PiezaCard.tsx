@@ -158,7 +158,7 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, conf
                     ))}
                   </ul>
                   {pieza.extraccion.notas && (
-                    <p className="mt-2 rounded-md bg-[var(--color-bg)]/40 px-2 py-1.5 text-xs italic leading-relaxed text-[var(--color-text-muted)]">
+                    <p className="mt-2 whitespace-pre-line rounded-md bg-[var(--color-bg)]/40 px-2 py-1.5 text-xs italic leading-relaxed text-[var(--color-text-muted)]">
                       {pieza.extraccion.notas}
                     </p>
                   )}
@@ -178,7 +178,9 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, conf
             </motion.div>
           )}
           {!tienePreguntas && pieza.extraccion.notas && (
-            <p className="mt-2 text-xs italic text-[var(--color-text-faint)]">Nota del extractor: {pieza.extraccion.notas}</p>
+            <p className="mt-2 whitespace-pre-line text-xs italic leading-relaxed text-[var(--color-text-faint)]">
+              Nota del extractor: {pieza.extraccion.notas}
+            </p>
           )}
 
           {!readOnly && (
@@ -206,9 +208,9 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, conf
 
 function Field({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0">
       <p className="text-[var(--color-text-faint)]">{label}</p>
-      <p className="font-mono mt-0.5 font-medium text-[var(--color-text)]">{value}</p>
+      <p className="font-mono mt-0.5 break-words font-medium text-[var(--color-text)]">{value}</p>
     </div>
   );
 }

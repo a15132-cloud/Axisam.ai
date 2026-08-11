@@ -15,6 +15,24 @@ plano. Si una medida, tolerancia o dato del cajetin no es legible o no esta pres
 Un humano revisara y confirmara TODO antes de que se modele la pieza - tu trabajo es ser preciso
 y honesto sobre la incertidumbre, no completar huecos.
 
+FORMATO DE `extraccion.notas`: un humano bajo presion la va a leer en una pantalla chica, no en un
+reporte. Si cubres mas de un tema (una cadena de cotas, un hallazgo geometrico, una cota ambigua,
+etc.), separa cada tema en su propio parrafo corto con una linea en blanco entre ellos (usa saltos
+de linea reales en el string, no todo pegado en un solo parrafo corrido) - un muro de texto de un
+solo bloque es tan inutil como no explicar nada, porque nadie lo lee completo. Empieza cada parrafo
+nombrando el tema en 2-4 palabras (p.ej. "Cadena de cotas de los barrenos:", "Diametro del
+avellanado:") para que se pueda escanear rapido cual parrafo resuelve que.
+
+NO PREGUNTES LO QUE NO CAMBIA NADA: antes de agregar algo a `campos_baja_confianza`, pregúntate "si
+me equivoco en esto, ¿el STEP o el codigo G salen diferentes?". Si la respuesta es no - las dos
+(o mas) interpretaciones posibles llevan exactamente al mismo resultado fisico (p.ej. dos
+perforaciones identicas y simetricas donde solo no sabes cual esta etiquetada "B" y cual "C" en el
+plano, pero ambas se maquinan igual) - NO la marques como pendiente ni se la preguntes al humano:
+resuelve la ambiguedad tu mismo (cualquiera de las opciones vale, ya que da igual) y como mucho
+mencionalo de pasada en `extraccion.notas` si aporta contexto util. Reservar las preguntas de
+verdad para lo que sí importa es lo que hace que un humano bajo presion las lea con atencion en vez
+de aprender a ignorarlas por costumbre.
+
 COMO LEER EL PLANO:
 1. Identifica todas las vistas presentes (frontal, superior, lateral, isometrica, cortes/secciones)
    y correlaciona las cotas entre vistas - una medida puede aparecer en una vista y no en otra.
@@ -185,11 +203,21 @@ NO es re-extraer desde cero - es auditar activamente lo que ya existe, buscando 
    explicito disponible - y que las etiquetas escritas con flecha (tipo de rosca, soldadura, tipo
    de union, etc.) quedaron registradas en el campo del feature correspondiente, no perdidas sueltas
    solo en `extraccion.notas`.
+8. PREGUNTAS QUE NO CAMBIAN NADA: revisa cada entrada de `campos_baja_confianza` de la primera
+   pasada con la pregunta "si el humano se equivoca al resolver esto, ¿el STEP o el codigo G salen
+   diferentes?" (ver regla del prompt de extraccion). Si encuentras una donde la respuesta es no -
+   dos opciones simetricas/identicas donde solo cambia una etiqueta, no la geometria real - quitala
+   de `campos_baja_confianza` (resuelvela tu mismo, cualquiera de las opciones vale) en vez de
+   dejarla ahi. Cada pregunta de mas que no importa hace que las que si importan se lean con menos
+   atencion.
 
 Cuando corrijas el JSON, parte del JSON que recibiste y modificalo - no lo reconstruyas desde
 cero. `campos_baja_confianza` y `notas` de la primera pasada casi siempre siguen siendo validos;
 agrega tus propios hallazgos a esos mismos campos en vez de reemplazarlos, para no perder una
-incertidumbre real que la primera pasada sí capturo bien.
+incertidumbre real que la primera pasada sí capturo bien. Si agregas texto a `notas`, respeta el
+mismo formato de parrafos cortos con linea en blanco entre temas que pide el prompt de extraccion
+(ver "FORMATO DE extraccion.notas" ahi) - si la primera pasada ya viene en un solo bloque corrido,
+separalo en parrafos tu al corregirlo, no lo dejes ilegible.
 
 Si encuentras algo que puedes resolver con certeza (una cadena que sí reconcilia si la lees bien,
 un conteo que no cuadra), corrige el JSON directamente. Si encuentras algo que NO puedes resolver

@@ -57,7 +57,7 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
 
         {entry.kind === "text" && (
           <div
-            className={`rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
+            className={`whitespace-pre-line rounded-2xl px-4 py-2.5 text-sm leading-relaxed ${
               isUser ? "rounded-tr-sm bg-[var(--color-accent)] text-black" : "rounded-tl-sm bg-[var(--color-surface-2)] text-[var(--color-text)]"
             }`}
           >
@@ -121,7 +121,7 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
         )}
 
         {entry.kind === "error" && (
-          <div className="rounded-2xl rounded-tl-sm border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-2.5 text-sm text-[var(--color-danger)]">
+          <div className="whitespace-pre-line rounded-2xl rounded-tl-sm border border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-2.5 text-sm leading-relaxed text-[var(--color-danger)]">
             {entry.texto}
           </div>
         )}

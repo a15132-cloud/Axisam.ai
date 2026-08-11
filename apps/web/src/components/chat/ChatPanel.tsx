@@ -12,25 +12,55 @@ interface ChatPanelProps {
   onSubirArchivo: (archivo: File, instrucciones: string) => Promise<void>;
   enviando: boolean;
   subiendo: boolean;
+  generandoModelo: boolean;
+  generandoTrayectorias: boolean;
   puedeChatear: boolean;
 }
 
-function TypingIndicator() {
+/**
+ * Explicit "trabajando en ello" text next to the dots, not just the dots
+ * alone - a non-technical user staring at 3 bouncing dots for the 10-30s
+ * a real Claude vision call or cadquery build can take has no way to know
+ * if it's still working or stuck. Each phase gets its own message instead
+ * of one generic "cargando" so it also doubles as a status indicator.
+ */
+function TypingIndicator({ texto }: { texto: string }) {
   return (
-    <div className="flex items-center gap-1.5 rounded-2xl rounded-tl-sm bg-[var(--color-surface-2)] px-4 py-3">
-      {[0, 1, 2].map((i) => (
-        <motion.span
-          key={i}
-          className="h-1.5 w-1.5 rounded-full bg-[var(--color-text-faint)]"
-          animate={{ opacity: [0.3, 1, 0.3] }}
-          transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
-        />
-      ))}
+    <div className="flex items-center gap-2.5 rounded-2xl rounded-tl-sm bg-[var(--color-surface-2)] px-4 py-3">
+      <div className="flex items-center gap-1.5">
+        {[0, 1, 2].map((i) => (
+          <motion.span
+            key={i}
+            className="h-1.5 w-1.5 rounded-full bg-[var(--color-text-faint)]"
+            animate={{ opacity: [0.3, 1, 0.3] }}
+            transition={{ duration: 1, repeat: Infinity, delay: i * 0.15 }}
+          />
+        ))}
+      </div>
+      <span className="text-xs text-[var(--color-text-muted)]">{texto}</span>
     </div>
   );
 }
 
-export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, enviando, subiendo, puedeChatear }: ChatPanelProps) {
+export function ChatPanel({
+  entries,
+  actions,
+  onEnviarMensaje,
+  onSubirArchivo,
+  enviando,
+  subiendo,
+  generandoModelo,
+  generandoTrayectorias,
+  puedeChatear,
+}: ChatPanelProps) {
+  const trabajando = enviando || subiendo || generandoModelo || generandoTrayectorias;
+  const textoTrabajando = subiendo
+    ? "Analizando el plano y sacando las medidas..."
+    : generandoModelo
+      ? "Generando el modelo 3D (STEP/STL)..."
+      : generandoTrayectorias
+        ? "Calculando trayectorias y simulación..."
+        : "Axiscam está escribiendo...";
   const [texto, setTexto] = useState("");
   const [archivoPendiente, setArchivoPendiente] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -38,7 +68,7 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: "smooth" });
-  }, [entries.length, enviando, subiendo]);
+  }, [entries.length, trabajando]);
 
   async function enviar() {
     const t = texto.trim();
@@ -83,10 +113,10 @@ export function ChatPanel({ entries, actions, onEnviarMensaje, onSubirArchivo, e
           ))}
         </AnimatePresence>
 
-        {(enviando || subiendo) && (
+        {trabajando && (
           <div className="flex gap-3">
             <AxiscamLogo size={28} animated={false} />
-            <TypingIndicator />
+            <TypingIndicator texto={textoTrabajando} />
           </div>
         )}
       </div>

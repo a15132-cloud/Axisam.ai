@@ -111,11 +111,12 @@ COMO LEER EL PLANO:
     forma de cargar la geometria del contorno y el motor lo omite; el contorno real tiene que ir
     en `puntos_perfil_mm`. (Un relieve corriendo a lo largo de un borde que SI cambia la altura Z
     en vez del contorno XY es distinto - ver 3d, `escalon`.)
-3c. Si ves un saliente/resalte/boss circular que sobresale de la cara de la pieza (material que
-    sobresale, no un corte) - por ejemplo un anillo elevado alrededor de un barreno central -
-    usa el feature `saliente` con su `diametro_mm` (diametro exterior del saliente) y
-    `profundidad_mm` (altura que sobresale sobre la cara). No uses `cajera` para esto - cajera
-    solo puede quitar material, nunca agregarlo.
+3c. Si ves un saliente/resalte/boss que sobresale de la cara de la pieza (material que sobresale,
+    no un corte) usa el feature `saliente` con `profundidad_mm` (altura que sobresale sobre la
+    cara) y, segun su forma en la vista de planta: si es circular (p.ej. un anillo elevado
+    alrededor de un barreno central) usa `diametro_mm` (diametro exterior); si es rectangular o
+    una pestana/bloque prismatico usa `largo_mm` y `ancho_mm` (igual que acotarias una cajera).
+    No uses `cajera` para esto - cajera solo puede quitar material, nunca agregarlo.
 3d. Una linea CONTINUA que corre a lo largo de TODO un borde de la pieza en una vista frontal o
     de planta (paralela a ese borde, no un rasgo local cerca de una sola cota) casi siempre es
     geometria real, no una linea de cota/construccion - tipicamente un relieve/rebaje escalonado

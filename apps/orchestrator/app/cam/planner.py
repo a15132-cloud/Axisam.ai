@@ -46,7 +46,18 @@ def _espesor_efectivo(pieza: Pieza, feature: Feature) -> float:
     for otro in pieza.features:
         if otro.tipo != TipoFeature.SALIENTE:
             continue
-        radio_boss = (otro.diametro_mm or 10.0) / 2
+        # Un saliente rectangular no tiene diametro_mm - usar la mitad de
+        # la diagonal (mayor que cualquier radio real del rectangulo) como
+        # radio_boss aqui es deliberadamente generoso: este calculo decide
+        # si una feature cercana necesita espesor extra para no quedar
+        # corta, y sobrestimar el area de influencia del boss es el lado
+        # seguro (en el peor caso agrega margen de mas, nunca de menos).
+        if otro.diametro_mm is not None:
+            radio_boss = otro.diametro_mm / 2
+        elif otro.largo_mm is not None and otro.ancho_mm is not None:
+            radio_boss = math.hypot(otro.largo_mm, otro.ancho_mm) / 2
+        else:
+            radio_boss = 10.0
         altura_boss = otro.profundidad_mm or 5.0
         for pos_boss in otro.lista_posiciones():
             for pos in feature.lista_posiciones():
@@ -68,7 +79,16 @@ def _holgura_disponible_saliente(pieza: Pieza, feature: Feature) -> float | None
     d = pieza.dimensiones
     holguras = []
     for pos in feature.lista_posiciones():
-        radio_boss = (feature.diametro_mm or 10.0) / 2
+        # Mismo criterio conservador que _espesor_efectivo: sin diametro_mm
+        # (saliente rectangular) usar la media diagonal como radio
+        # equivalente - sobrestima el boss, no la holgura, que es el lado
+        # seguro para una herramienta que tiene que rodearlo sin tocarlo.
+        if feature.diametro_mm is not None:
+            radio_boss = feature.diametro_mm / 2
+        elif feature.largo_mm is not None and feature.ancho_mm is not None:
+            radio_boss = math.hypot(feature.largo_mm, feature.ancho_mm) / 2
+        else:
+            radio_boss = 5.0
         if d.forma_base == FormaBase.CIRCULAR and d.diametro_mm:
             radio_max = d.diametro_mm / 2 - math.hypot(pos.x, pos.y)
         else:

@@ -115,30 +115,62 @@ def _llamar_registrar_pieza(
     # exception text, which meant a bad API key surfaced as an unreadable
     # dump of Anthropic's internal error JSON instead of "tu API key no es
     # valida" - now both the chat and extraction paths share one message.
-    response = active_client.messages.create(
-        model=settings.claude_model_vision,
-        max_tokens=8192,
-        system=system_prompt,
-        tools=[tool],
-        tool_choice={"type": "tool", "name": TOOL_NAME},
-        messages=[{"role": "user", "content": content_blocks}],
-    )
+    mensajes: list[dict] = [{"role": "user", "content": content_blocks}]
 
-    tool_use = next((b for b in response.content if b.type == "tool_use" and b.name == TOOL_NAME), None)
-    if tool_use is None:
-        raise ExtraccionError(
-            "Claude no devolvio una extraccion estructurada para este plano. Intenta de nuevo, sube una "
-            "imagen mas clara, o verifica que el archivo realmente contenga un dibujo de pieza."
+    # Hasta 2 intentos: si la llamada a la herramienta no valida contra el
+    # schema real de Pieza, se le devuelve el error exacto a Claude y se le
+    # da una oportunidad de corregir su propia llamada antes de fallar toda
+    # la subida - esto paso en vivo con un saliente rectangular sin
+    # diametro_mm (un caso real y valido que el schema en ese momento
+    # rechazaba); en general, un error de formato que el propio modelo
+    # puede corregir con el mensaje de error en mano no deberia terminar
+    # como un dump crudo de pydantic en el chat del usuario.
+    for intento in range(2):
+        response = active_client.messages.create(
+            model=settings.claude_model_vision,
+            max_tokens=8192,
+            system=system_prompt,
+            tools=[tool],
+            tool_choice={"type": "tool", "name": TOOL_NAME},
+            messages=mensajes,
         )
 
-    try:
-        pieza = Pieza.model_validate(tool_use.input)
-    except ValidationError as exc:
-        raise ExtraccionError(
-            f"La extraccion de Claude no cumple el formato esperado de pieza: {exc}"
-        ) from exc
+        tool_use = next((b for b in response.content if b.type == "tool_use" and b.name == TOOL_NAME), None)
+        if tool_use is None:
+            raise ExtraccionError(
+                "Claude no devolvio una extraccion estructurada para este plano. Intenta de nuevo, sube una "
+                "imagen mas clara, o verifica que el archivo realmente contenga un dibujo de pieza."
+            )
 
-    return ResultadoExtraccion(pieza=pieza, raw_tool_input=tool_use.input, stop_reason=response.stop_reason or "")
+        try:
+            pieza = Pieza.model_validate(tool_use.input)
+        except ValidationError as exc:
+            if intento == 0:
+                mensajes.append({"role": "assistant", "content": [b.model_dump() for b in response.content]})
+                mensajes.append(
+                    {
+                        "role": "user",
+                        "content": [
+                            {
+                                "type": "tool_result",
+                                "tool_use_id": tool_use.id,
+                                "content": (
+                                    f"El formato no es valido: {exc}\n\nVuelve a llamar a {TOOL_NAME} corrigiendo "
+                                    "exactamente estos campos - no cambies el resto de la extraccion."
+                                ),
+                                "is_error": True,
+                            }
+                        ],
+                    }
+                )
+                continue
+            raise ExtraccionError(
+                f"La extraccion de Claude no cumple el formato esperado de pieza: {exc}"
+            ) from exc
+
+        return ResultadoExtraccion(pieza=pieza, raw_tool_input=tool_use.input, stop_reason=response.stop_reason or "")
+
+    raise ExtraccionError("No se pudo obtener una extraccion valida del plano despues de reintentar.")
 
 
 def _verificar_y_refinar(

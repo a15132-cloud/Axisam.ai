@@ -321,8 +321,26 @@ def _bloque_saliente(pp: dict, feature: Feature, op, pieza: Pieza, tool_num: int
     r_herr = op.herramienta.diametro_mm / 2
     altura_saliente = feature.profundidad_mm or 5.0
 
+    if feature.diametro_mm is None:
+        # Saliente rectangular/prismatico (largo_mm/ancho_mm en vez de
+        # diametro_mm - ver Feature._validate_shape_params) - el careado
+        # de anillos concentricos de aqui abajo solo sabe rodear un boss
+        # circular. Un boss rectangular necesitaria una estrategia de
+        # careado distinta (una isla rectangular, no un anillo), que este
+        # motor todavia no genera - omitir con una nota clara es mejor que
+        # cortar anillos alrededor de un radio inventado que no corresponde
+        # a la forma real de la pieza.
+        return [
+            _encabezado_id(pp, feature, op),
+            _comentario(
+                pp,
+                f"SALIENTE id={feature.id or '?'}: boss rectangular (no circular) - el careado automatico "
+                "todavia solo soporta salientes circulares. TRAYECTORIA NO GENERADA, modelar manualmente.",
+            ),
+        ], False
+
     for pos in feature.lista_posiciones():
-        radio_boss = (feature.diametro_mm or 10.0) / 2
+        radio_boss = feature.diametro_mm / 2
 
         d = pieza.dimensiones
         if d.forma_base == FormaBase.CIRCULAR and d.diametro_mm:

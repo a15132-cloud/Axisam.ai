@@ -168,6 +168,37 @@ def test_saliente_con_barreno_pasante_perfora_el_boss_tambien():
     assert volumen_removido == pytest.approx(1256.6, rel=0.02)
 
 
+def test_saliente_rectangular_sin_diametro_mm_se_modela():
+    """A saliente is exactly as often a rectangular pad/tab as a circular
+    boss - caught live on a real plano where Claude correctly extracted a
+    rectangular saliente (largo_mm/ancho_mm, no diametro_mm) and the
+    schema rejected it outright with a raw pydantic error. Same additive
+    shape as the circular case, just rect() instead of circle().
+    """
+    base = Pieza(
+        pieza="placa_con_pestana",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+    )
+    con_pestana = Pieza(
+        pieza="placa_con_pestana",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="boss", tipo=TipoFeature.SALIENTE, largo_mm=20, ancho_mm=15, profundidad_mm=6, posicion=Posicion2D(x=50, y=30))
+        ],
+    )
+
+    resultado_base = build_pieza(base)
+    resultado_pestana = build_pieza(con_pestana)
+    props_base = calcular_propiedades(resultado_base.solido)
+    props_pestana = calcular_propiedades(resultado_pestana.solido)
+
+    assert props_pestana["bbox_mm"]["z"] == pytest.approx(16.0, abs=0.01)  # 10mm base + 6mm boss height
+    volumen_agregado = props_pestana["volumen_mm3"] - props_base["volumen_mm3"]
+    assert volumen_agregado == pytest.approx(20 * 15 * 6, rel=0.02)  # box, not a cylinder
+
+
 def test_base_poligonal_construye_perfil_escalonado():
     """An L-shaped outline (a rectangle with a corner notch) - the exact
     shape of feature a plain rectangular/circular base can't produce,

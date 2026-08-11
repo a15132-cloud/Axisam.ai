@@ -114,8 +114,14 @@ class Feature(BaseModel):
     def _validate_shape_params(self) -> "Feature":
         if self.tipo in (TipoFeature.BARRENO, TipoFeature.BARRENO_ROSCADO) and self.diametro_mm is None:
             raise ValueError(f"feature {self.tipo} requiere diametro_mm")
-        if self.tipo == TipoFeature.SALIENTE and self.diametro_mm is None:
-            raise ValueError("feature saliente requiere diametro_mm")
+        # Un saliente (boss) puede ser circular (diametro_mm) o rectangular/
+        # prismatico (largo_mm + ancho_mm) - un realce/pestana rectangular en
+        # una placa es tan comun como uno circular y el plano lo acota con
+        # las mismas dos medidas que un cajera o una base rectangular, nunca
+        # con un diametro. Exigir diametro_mm siempre rechazaba una
+        # extraccion real y correcta solo porque el feature no es redondo.
+        if self.tipo == TipoFeature.SALIENTE and self.diametro_mm is None and (self.largo_mm is None or self.ancho_mm is None):
+            raise ValueError("feature saliente requiere diametro_mm (si es circular) o largo_mm y ancho_mm (si es rectangular)")
         return self
 
     def lista_posiciones(self) -> list[Posicion2D]:

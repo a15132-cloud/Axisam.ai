@@ -35,6 +35,10 @@ class _FakeToolUseBlock:
     input: dict
     name: str = "registrar_pieza_extraida"
     type: str = "tool_use"
+    id: str = "toolu_fake"
+
+    def model_dump(self) -> dict:
+        return {"type": self.type, "id": self.id, "name": self.name, "input": self.input}
 
 
 class _FakeMessages:
@@ -132,6 +136,26 @@ def test_extraccion_con_json_invalido_lanza_error_legible():
     client = _FakeClient(invalido)
     with pytest.raises(ExtraccionError, match="no cumple el formato esperado"):
         extraer_pieza_desde_plano(b"bytes", "image/png", "plano.png", client=client)
+
+
+def test_json_invalido_se_autocorrige_en_un_segundo_intento():
+    """A tool call that fails Pydantic validation gets fed its own error and
+    one chance to correct itself before the whole upload fails - caught
+    live when Claude called `saliente` without diametro_mm for a real
+    rectangular boss (a valid shape the schema didn't accept at the time).
+    The fix that actually matters is accepting that shape (see
+    schemas/piece.py), but this retry generalizes to any other future
+    schema mismatch instead of dumping a raw pydantic error on the user.
+    """
+    invalido = {"pieza": "x"}  # missing required material/dimensiones
+    client = _FakeClient([invalido, EJEMPLO_PIEZA_VALIDA])
+
+    resultado = extraer_primera_pasada(b"bytes", "image/png", "plano.png", client=client)
+
+    assert resultado.pieza.pieza == "placa_soporte"
+    assert len(client.messages.llamadas) == 2
+    segundo_intento = client.messages.llamadas[1]["messages"]
+    assert segundo_intento[-1]["content"][0]["is_error"] is True
 
 
 def test_instrucciones_usuario_se_incluyen_en_el_mensaje():

@@ -227,6 +227,25 @@ def _agregar_saliente_cilindrico(solido: cq.Workplane, feature: Feature, pos: Po
     return solido.union(pad)
 
 
+def _agregar_saliente_rectangular(solido: cq.Workplane, feature: Feature, pos: Posicion2D, espesor: float) -> cq.Workplane:
+    """Same additive boss as _agregar_saliente_cilindrico, but for a
+    rectangular/prismatic pad (a raised tab or block) instead of a
+    circular one - a saliente is exactly as often a rectangle as a
+    circle on a real plano (dimensioned with largo_mm/ancho_mm the same
+    way a cajera is), so it needs the same two shapes CAJERA already has
+    for cutting. `pos` is the pad's own center, matching how every other
+    positioned feature in this schema is placed.
+    """
+    largo = feature.largo_mm or 10.0
+    ancho = feature.ancho_mm or 10.0
+    altura = feature.profundidad_mm or 5.0
+    if feature.cara == "inferior":
+        pad = _workplane_en(pos.x, pos.y, 0.0).rect(largo, ancho).extrude(-altura)
+    else:
+        pad = _workplane_en(pos.x, pos.y, espesor).rect(largo, ancho).extrude(altura)
+    return solido.union(pad)
+
+
 def _cortar_barreno_lateral(
     solido: cq.Workplane, feature: Feature, pos: Posicion2D, dims: Dimensiones, cara: str
 ) -> cq.Workplane:
@@ -411,7 +430,10 @@ def build_pieza(pieza: Pieza) -> BuildResult:
         if f.tipo != TipoFeature.SALIENTE:
             continue
         for pos in f.lista_posiciones():
-            solido = _agregar_saliente_cilindrico(solido, f, pos, dims.espesor_mm)
+            if f.diametro_mm is not None:
+                solido = _agregar_saliente_cilindrico(solido, f, pos, dims.espesor_mm)
+            else:
+                solido = _agregar_saliente_rectangular(solido, f, pos, dims.espesor_mm)
 
     # Edge reliefs (escalon) span the whole edge, not a position - handled
     # as their own pass rather than in the per-position loop below, and

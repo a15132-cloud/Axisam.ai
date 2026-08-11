@@ -17,8 +17,25 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=settings.cors_allow_origins,
-    allow_credentials=True,
+    # Deliberately permissive, unconditionally - not driven by
+    # AXISCAM_CORS_ORIGINS anymore. That env var (see render.yaml/config.py)
+    # requires an exact match to whatever domain the frontend happens to be
+    # served from, and Vercel hands out a NEW url for every preview
+    # deployment on top of the stable production one - a mismatch there
+    # (wrong value, stale value, testing from a preview link instead of
+    # production) silently blocks every request from the browser with an
+    # error that looks identical to "the internet is down" (see
+    # apps/web/src/lib/api.ts's diagnosticarNetworkError). This API has no
+    # cookie/session-based auth for CORS to protect in the first place - the
+    # frontend never sets withCredentials, and the shared ANTHROPIC_API_KEY
+    # is a server-side secret never exposed to the browser regardless of
+    # origin - so restricting the origin list here bought safety this app
+    # doesn't need at the cost of a whole recurring class of deployment
+    # failures. Anyone who wants to call this API directly already can, from
+    # curl or a script, with zero regard for CORS; the browser-only
+    # restriction was never a real barrier to that.
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

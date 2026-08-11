@@ -8,12 +8,17 @@ igual de validos) y convertirlo en datos estructurados, llamando a la herramient
 `registrar_pieza_extraida` exactamente una vez con el resultado.
 
 REGLA MAS IMPORTANTE: nunca inventes un valor que no puedas leer o inferir razonablemente del
-plano. Si una medida, tolerancia o dato del cajetin no es legible o no esta presente:
+plano. Pero "no esta presente" y "no esta acotado directamente" NO son lo mismo - un plano real
+casi nunca acota cada medida y cada angulo de forma explicita y aislada; se espera que quien lo lee
+calcule lo que falta a partir de lo que si esta. Antes de dejar CUALQUIER campo en null o de
+agregarlo a `campos_baja_confianza`, es obligatorio hacer el intento real de calcularlo con los
+demas numeros del plano - sumas/restas de cadenas de cotas, simetria, trigonometria para angulos
+(ver reglas 2c y 2d mas abajo para el mecanismo exacto). Solo despues de agotar eso en serio:
 - deja el campo en null (si es opcional), o usa el valor por defecto mas conservador posible
 - agrega el nombre del campo a `extraccion.campos_baja_confianza`
-- explica la ambiguedad en `extraccion.notas`
+- explica en `extraccion.notas` que combinaciones intentaste y por que ninguna cerro sin ambiguedad
 Un humano revisara y confirmara TODO antes de que se modele la pieza - tu trabajo es ser preciso
-y honesto sobre la incertidumbre, no completar huecos.
+y honesto sobre la incertidumbre real, no sobre la pereza de no haber hecho la cuenta.
 
 FORMATO DE `extraccion.notas`: un humano bajo presion la va a leer en una pantalla chica, no en un
 reporte. Si cubres mas de un tema (una cadena de cotas, un hallazgo geometrico, una cota ambigua,
@@ -72,6 +77,26 @@ COMO LEER EL PLANO:
     la cuenta en dos segundos sin tener que rehacerla el mismo. Solo repórtalo en
     `campos_baja_confianza` si de verdad no hay ninguna combinacion que lo resuelva sin ambiguedad
     (p.ej. faltan DOS tramos en la misma cadena y no hay forma de saber cuanto le toca a cada uno).
+2d. Los angulos casi nunca vienen todos acotados directamente tampoco - un plano tipicamente acota
+    UN angulo o UNA pendiente por zona y espera que el resto se derive de la geometria. Antes de
+    marcar un angulo como no encontrado, prueba estas relaciones (todas legitimas, no adivinanza,
+    mientras los numeros de entrada SI esten en el plano):
+    - Suma de angulos: en cualquier triangulo la suma interna es 180°; si conoces dos angulos de un
+      corte/vista triangular, el tercero es 180 menos los otros dos.
+    - Complementario/suplementario: una marca de perpendicularidad (⊥, o un angulo recto marcado
+      con el cuadradito) da 90° exactos; una linea recta/plana da 180° - un angulo faltante junto a
+      uno de estos suele ser 90 o 180 menos el angulo que si esta acotado.
+    - Trigonometria con dos catetos o cateto+hipotenusa: si un chaflan, rampa o corte da DOS
+      medidas lineales de un mismo triangulo rectangulo (p.ej. cuanto avanza en un eje y cuanto en
+      el otro, o el cateto y la hipotenusa), el angulo es atan/asin/acos de esa razon - no lo
+      dejes en null solo porque el numero en grados no aparece escrito, si los catetos si estan.
+    - Simetria/espejo: si el plano muestra un detalle a un lado con angulo acotado y dice o implica
+      que el otro lado es igual/espejo (misma familia que la regla 2c para medidas lineales), usa
+      el mismo angulo del lado que si esta acotado.
+    Si terminas calculando un angulo asi, va en el campo normal (`angulo_grados` u homologo), no en
+    null - explica en `extraccion.notas` que numeros/relacion usaste, igual que con las cadenas de
+    cotas. Solo a `campos_baja_confianza` si de verdad ninguna de estas relaciones cierra sin
+    ambiguedad con los numeros que el plano realmente muestra.
 3. Identifica cada feature individual (barrenos, cajeras, ranuras, chaflanes, redondeos,
    escalones, salientes/bosses, roscas) con su posicion en X,Y respecto a un origen consistente
    (normalmente una esquina o el centro de la vista superior - indica cual usaste en
@@ -193,6 +218,11 @@ NO es re-extraer desde cero - es auditar activamente lo que ya existe, buscando 
    sin acotar, confirma que el JSON lo calculo por resta (total menos lo conocido - ver regla 2c
    del prompt de extraccion) en vez de dejarlo en null o reportarlo como no encontrado. Si el JSON
    no lo intento y tu si puedes resolverlo con los numeros del plano, hazlo tu y corrige el JSON.
+   Lo mismo para angulos: si un `angulo_grados` quedo en null o en `campos_baja_confianza`, revisa
+   si se pudo derivar por suma de angulos de triangulo, complementario/suplementario de una marca
+   de perpendicularidad, trigonometria con dos catetos, o simetria (ver regla 2d del prompt de
+   extraccion) - si tu si logras cerrarlo con los numeros del plano y el JSON no lo intento,
+   calculalo y corrige el JSON en vez de dejarlo pendiente.
 3. CONTEOS: si el plano dice explicitamente una cantidad ("6 perforaciones", "4x", etc.), confirma
    que el JSON tiene exactamente esa cantidad de posiciones, no menos.
 4. FEATURES CON UBICACION PERO SIN DIMENSION CRITICA: cualquier feature cuya posicion este

@@ -43,6 +43,7 @@ export default function App() {
   const [enviando, setEnviando] = useState(false);
   const [confirmandoExtraccion, setConfirmandoExtraccion] = useState(false);
   const [confirmandoModelo, setConfirmandoModelo] = useState(false);
+  const [buscandoMedidas, setBuscandoMedidas] = useState(false);
 
   useEffect(() => {
     api
@@ -179,6 +180,19 @@ export default function App() {
     aplicarProyecto(actualizado);
   }
 
+  async function buscarMedidasFaltantes() {
+    if (!proyecto) return;
+    setBuscandoMedidas(true);
+    try {
+      const actualizado = await api.buscarMedidasFaltantes(proyecto.id);
+      aplicarProyecto(actualizado);
+    } catch (err) {
+      setMensajesLibres((prev) => [...prev, errorEntry(err, "No se pudo volver a revisar el plano.")]);
+    } finally {
+      setBuscandoMedidas(false);
+    }
+  }
+
   async function confirmarModelo() {
     if (!proyecto) return;
     setConfirmandoModelo(true);
@@ -306,11 +320,13 @@ export default function App() {
                       proyectoId: proyecto.id,
                       onConfirmarExtraccion: confirmarExtraccion,
                       onGuardarEdicionPieza: guardarEdicionPieza,
+                      onBuscarMedidasFaltantes: buscarMedidasFaltantes,
                       onConfirmarModelo: confirmarModelo,
                       onAprobarFinal: aprobarFinal,
                       onRechazar: rechazar,
                       confirmandoExtraccion,
                       confirmandoModelo,
+                      buscandoMedidas,
                       bridgeConectado: !!bridgeWindows,
                       mastercamInstalado: !!bridgeWindows?.mastercam_instalado,
                     }}

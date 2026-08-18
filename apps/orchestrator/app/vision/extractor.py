@@ -277,6 +277,50 @@ def verificar_segunda_pasada(
     return _verificar_y_refinar(active_client, content_blocks_plano, primera_pasada)
 
 
+def buscar_campos_faltantes(
+    contenido: bytes,
+    media_type: str,
+    nombre_archivo: str,
+    pieza_actual: Pieza,
+    client: anthropic.Anthropic | None = None,
+) -> ResultadoExtraccion:
+    """User-triggered, explicit "try again" on just the fields still in
+    campos_baja_confianza after both normal passes already ran - the
+    third mechanism a real user asked for directly: "que se pueda decirle
+    que busque las medidas faltantes a ver si las encuentra". Not a
+    from-scratch re-extraction: hands Claude the CURRENT result and asks
+    it to look at the same plano again specifically for the still-open
+    fields, with explicit permission to try a different calculation
+    approach before giving up on any of them - fields already resolved
+    with confidence are not supposed to change.
+    """
+    active_client = _cliente_anthropic(client)
+    content_blocks = _build_content_blocks(contenido, media_type, nombre_archivo)
+    campos = pieza_actual.extraccion.campos_baja_confianza
+    content_blocks.append(
+        {
+            "type": "text",
+            "text": (
+                "Esta es la extraccion actual de este plano:\n\n"
+                f"{pieza_actual.model_dump_json(indent=2)}\n\n"
+                "El usuario pidio explicitamente que vuelvas a revisar el plano para intentar resolver estos "
+                "campos que quedaron marcados como de baja confianza:\n"
+                + "\n".join(f"- {c}" for c in campos)
+                + "\n\nMira el plano de nuevo con cuidado, especificamente buscando informacion para estos "
+                "puntos - prueba otras cadenas de cotas, simetrias, relaciones trigonometricas, vistas o "
+                "detalles que no se hayan usado todavia. Si esta vez SI puedes determinar alguno con certeza, "
+                "actualiza ese campo y quitalo de campos_baja_confianza. Si genuinamente el plano no tiene "
+                "suficiente informacion para alguno de ellos incluso con esta revision mas cuidadosa, mantenlo "
+                "en campos_baja_confianza pero explica en las notas exactamente que dato adicional se "
+                "necesitaria (p.ej. una cota que falta, una vista que no esta incluida). No cambies ningun "
+                "otro campo que ya estaba resuelto con confianza - llama a registrar_pieza_extraida con la "
+                "pieza completa, incluyendo lo que no cambio."
+            ),
+        }
+    )
+    return _llamar_registrar_pieza(active_client, SYSTEM_PROMPT, content_blocks)
+
+
 def extraer_pieza_desde_plano(
     contenido: bytes,
     media_type: str,

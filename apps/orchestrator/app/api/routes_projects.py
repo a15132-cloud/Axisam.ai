@@ -24,7 +24,13 @@ from app.schemas.piece import Pieza
 from app.schemas.project import Etapa, Proyecto
 from app.storage import files as storage
 from app.tools import handlers
-from app.vision.extractor import ExtraccionError, ResultadoExtraccion, extraer_primera_pasada, verificar_segunda_pasada
+from app.vision.extractor import (
+    ExtraccionError,
+    ResultadoExtraccion,
+    buscar_campos_faltantes,
+    extraer_primera_pasada,
+    verificar_segunda_pasada,
+)
 
 _logger = logging.getLogger(__name__)
 
@@ -243,6 +249,50 @@ def verificar_plano(project_id: str) -> Proyecto:
     proyecto.registrar_evento(
         "Datos extraidos del plano - esperando confirmacion",
         detalle=f"confianza {resultado.pieza.extraccion.confianza_global:.0%}",
+    )
+    storage.guardar_proyecto(proyecto)
+    return proyecto
+
+
+@router.post("/{project_id}/plano/buscar-medidas-faltantes")
+def buscar_medidas_faltantes(project_id: str) -> Proyecto:
+    """User-triggered "look again" on just the fields still flagged in
+    campos_baja_confianza - see buscar_campos_faltantes' docstring. Only
+    makes sense once the normal two-pass extraction has already landed on
+    the confirmation checkpoint; unlike verificar_plano this never falls
+    back silently on failure (a real error should reach the user - they
+    explicitly asked for this one extra look, so if it can't happen they
+    need to know rather than see nothing change).
+    """
+    proyecto = _obtener_o_404(project_id)
+    if proyecto.etapa != Etapa.ESPERANDO_CONFIRMACION_EXTRACCION or proyecto.pieza_extraida is None or not proyecto.archivo_plano:
+        raise HTTPException(
+            status_code=409, detail="No hay una extraccion lista para volver a revisar en este proyecto todavia."
+        )
+    if not proyecto.pieza_extraida.extraccion.campos_baja_confianza:
+        raise HTTPException(
+            status_code=409, detail="Esta extraccion no tiene campos marcados como de baja confianza para volver a buscar."
+        )
+
+    ruta_plano = storage.ruta_plano_subido(project_id, proyecto.archivo_plano)
+    if not ruta_plano.exists():
+        raise HTTPException(status_code=404, detail="No se encontro el archivo del plano guardado para volver a revisar.")
+    contenido = ruta_plano.read_bytes()
+
+    try:
+        resultado = buscar_campos_faltantes(contenido, "", proyecto.archivo_plano, proyecto.pieza_extraida)
+    except ExtraccionError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=_MENSAJE_SERVICIO_NO_DISPONIBLE) from exc
+    except anthropic.AnthropicError as exc:
+        _logger.error("Error de Anthropic buscando medidas faltantes (proyecto %s): %s", project_id, exc)
+        raise _http_desde_error_anthropic(exc) from exc
+
+    proyecto.pieza_extraida = resultado.pieza
+    proyecto.registrar_evento(
+        "Se volvio a revisar el plano por pedido del usuario",
+        detalle=f"quedan {len(resultado.pieza.extraccion.campos_baja_confianza)} campo(s) de baja confianza",
     )
     storage.guardar_proyecto(proyecto)
     return proyecto

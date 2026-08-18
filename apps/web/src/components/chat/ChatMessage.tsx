@@ -20,11 +20,13 @@ export interface ChatMessageActions {
   proyectoId: string;
   onConfirmarExtraccion: () => void;
   onGuardarEdicionPieza: (pieza: Pieza) => Promise<void>;
+  onBuscarMedidasFaltantes: () => void;
   onConfirmarModelo: () => void;
   onAprobarFinal: (aprobadoPor: string) => Promise<void>;
   onRechazar: (motivo: string) => Promise<void>;
   confirmandoExtraccion: boolean;
   confirmandoModelo: boolean;
+  buscandoMedidas: boolean;
   bridgeConectado: boolean;
   mastercamInstalado: boolean;
 }
@@ -82,6 +84,8 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
             confirming={actions.confirmandoExtraccion}
             onConfirmar={actions.onConfirmarExtraccion}
             onGuardarEdicion={actions.onGuardarEdicionPieza}
+            onBuscarMedidasFaltantes={actions.onBuscarMedidasFaltantes}
+            buscandoMedidas={actions.buscandoMedidas}
           />
         )}
 

@@ -182,6 +182,12 @@ export const api = {
   verificarExtraccion: (id: string) =>
     unwrap<Proyecto>(() => client.post(`/projects/${id}/plano/verificar`, undefined, { timeout: TIMEOUT_LLAMADA_CLAUDE_MS })),
 
+  // El usuario pidio explicitamente poder decirle a Axiscam "busca de nuevo
+  // las medidas que no encontraste" en vez de solo tener que llenarlas a
+  // mano - ver el docstring de buscar_campos_faltantes en el backend.
+  buscarMedidasFaltantes: (id: string) =>
+    unwrap<Proyecto>(() => client.post(`/projects/${id}/plano/buscar-medidas-faltantes`, undefined, { timeout: TIMEOUT_LLAMADA_CLAUDE_MS })),
+
   editarPiezaExtraida: (id: string, pieza: Pieza) => unwrap<Proyecto>(() => client.put(`/projects/${id}/pieza-extraida`, pieza)),
   // reintentosRestantes=2 (en vez del default de 1) en la cadena
   // confirmar-extraccion -> generar-modelo-3d especificamente: es exactamente

@@ -81,6 +81,7 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
           <PiezaCard
             pieza={entry.pieza}
             readOnly={entry.confirmado}
+            verificando={entry.verificando}
             confirming={actions.confirmandoExtraccion}
             onConfirmar={actions.onConfirmarExtraccion}
             onGuardarEdicion={actions.onGuardarEdicionPieza}

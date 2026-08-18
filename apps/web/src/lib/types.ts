@@ -199,7 +199,7 @@ export type ChatEntry =
   | { id: string; role: "user"; kind: "text"; ts: string; texto: string }
   | { id: string; role: "user"; kind: "upload"; ts: string; archivoNombre: string; instrucciones?: string }
   | { id: string; role: "assistant"; kind: "text"; ts: string; texto: string }
-  | { id: string; role: "assistant"; kind: "extraccion"; ts: string; pieza: Pieza; confirmado: boolean }
+  | { id: string; role: "assistant"; kind: "extraccion"; ts: string; pieza: Pieza; confirmado: boolean; verificando: boolean }
   | {
       id: string;
       role: "assistant";

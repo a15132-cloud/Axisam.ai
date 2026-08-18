@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Braces, Check, HelpCircle, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
+import { Braces, Check, HelpCircle, Loader2, Pencil, Plus, RefreshCw, Trash2, X } from "lucide-react";
 import type { Feature, Pieza } from "../../lib/types";
 import { Badge } from "../common/Badge";
 import { Button } from "../common/Button";
@@ -8,6 +8,12 @@ import { Button } from "../common/Button";
 interface PiezaCardProps {
   pieza: Pieza;
   readOnly?: boolean;
+  // true mientras la segunda pasada (auditoria) todavia esta en curso -
+  // pieza_extraida ya existe desde la primera pasada asi que esta tarjeta
+  // ya se ve, pero el backend todavia no acepta confirmar/editar/buscar de
+  // nuevo hasta que esa segunda pasada termine. Ver el comentario en
+  // deriveEntries.ts.
+  verificando?: boolean;
   onConfirmar?: () => void;
   onGuardarEdicion?: (pieza: Pieza) => Promise<void>;
   onBuscarMedidasFaltantes?: () => void;
@@ -36,7 +42,7 @@ function ConfidenceBadge({ confianza }: { confianza: number }) {
   return <Badge tone={tone}>confianza {(confianza * 100).toFixed(0)}%</Badge>;
 }
 
-export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, onBuscarMedidasFaltantes, confirming, buscandoMedidas }: PiezaCardProps) {
+export function PiezaCard({ pieza, readOnly, verificando, onConfirmar, onGuardarEdicion, onBuscarMedidasFaltantes, confirming, buscandoMedidas }: PiezaCardProps) {
   const [editando, setEditando] = useState(false);
   const [modoJson, setModoJson] = useState(false);
   const [borrador, setBorrador] = useState<Pieza>(() => clonar(pieza));
@@ -129,6 +135,13 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, onBu
         <h4 className="text-sm font-semibold text-[var(--color-text)]">Resumen extraído del plano</h4>
         <ConfidenceBadge confianza={pieza.extraccion.confianza_global} />
       </div>
+
+      {verificando && !editando && (
+        <div className="mb-3 flex items-center gap-2 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-3)] px-3 py-2 text-xs text-[var(--color-text-muted)]">
+          <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" />
+          Todavía se está verificando esta extracción con una segunda revisión - espera unos segundos antes de confirmar o editar.
+        </div>
+      )}
 
       {editando ? (
         <div className="space-y-3">
@@ -365,6 +378,8 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, onBu
                       icon={<RefreshCw className="h-3.5 w-3.5" />}
                       onClick={onBuscarMedidasFaltantes}
                       loading={buscandoMedidas}
+                      disabled={verificando}
+                      title={verificando ? "Espera a que termine la verificación en curso" : undefined}
                       className="mt-2.5 !px-2.5 !py-1.5 text-xs"
                     >
                       Buscar estas medidas de nuevo en el plano
@@ -398,12 +413,24 @@ export function PiezaCard({ pieza, readOnly, onConfirmar, onGuardarEdicion, onBu
                 icon={<Check className="h-3.5 w-3.5" />}
                 onClick={onConfirmar}
                 loading={confirming}
-                disabled={!puedeConfirmar}
-                title={puedeConfirmar ? undefined : "Marca la casilla de arriba, o edita la información, antes de confirmar"}
+                disabled={!puedeConfirmar || verificando}
+                title={
+                  verificando
+                    ? "Espera a que termine la verificación en curso"
+                    : puedeConfirmar
+                      ? undefined
+                      : "Marca la casilla de arriba, o edita la información, antes de confirmar"
+                }
               >
                 Confirmar y continuar
               </Button>
-              <Button variant="secondary" icon={<Pencil className="h-3.5 w-3.5" />} onClick={empezarEdicion}>
+              <Button
+                variant="secondary"
+                icon={<Pencil className="h-3.5 w-3.5" />}
+                onClick={empezarEdicion}
+                disabled={verificando}
+                title={verificando ? "Espera a que termine la verificación en curso" : undefined}
+              >
                 Editar información
               </Button>
             </motion.div>

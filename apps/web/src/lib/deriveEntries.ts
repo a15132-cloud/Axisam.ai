@@ -36,6 +36,18 @@ export function derivarEntriesPipeline(proyecto: Proyecto): ChatEntry[] {
       ts: buscarTs(proyecto, "datos extraidos"),
       pieza: proyecto.pieza_extraida,
       confirmado: proyecto.pieza_confirmada,
+      // pieza_extraida ya esta poblada desde la primera pasada (ver el
+      // docstring de subir_plano en el backend - es una red de seguridad
+      // en caso de que la segunda pasada nunca llegue a completarse), pero
+      // eso significa que esta tarjeta puede aparecer en pantalla MIENTRAS
+      // la segunda pasada (verificacion) todavia esta en curso, minutos
+      // antes de que etapa avance a esperando_confirmacion_extraccion. Un
+      // click en cualquier boton de accion durante esa ventana choca
+      // contra una precondicion del backend que todavia no se cumple - un
+      // error confuso por algo que en unos segundos mas se hubiera resuelto
+      // solo. verificando le dice a PiezaCard que desactive esos botones
+      // mientras tanto.
+      verificando: proyecto.etapa === "extrayendo",
     });
   }
 

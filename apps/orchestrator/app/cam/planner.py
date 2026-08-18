@@ -5,11 +5,16 @@ here: real decisions (tool, speeds/feeds, strategy) via the Capa 5 rules
 engine, per feature. This is genuinely useful output - a machinist can
 review and use this plan even before any G-code exists.
 
-What this module does NOT do: gouge/collision checking across
-simultaneous features, adaptive/trochoidal roughing, or ramped tool
-entry - real 2.5D cutter-center geometry for pockets and exterior
-contours now lives in cam/toolpath_geometry.py and cam/gcode.py, but
-without those safety/optimization layers a real CAM engine provides.
+What this module does NOT do: adaptive/trochoidal roughing, or any 3D
+tool-holder/fixture collision check - real 2.5D cutter-center geometry
+for pockets and exterior contours lives in cam/toolpath_geometry.py and
+cam/gcode.py (which also now ramps entries instead of plunging
+straight down, see _movimientos_rampa there), but without those
+optimization layers a real CAM engine provides. This module DOES flag
+features whose toolpaths sit closer together than their own geometry +
+assigned tool need to avoid overlapping - see
+_advertencias_features_cercanas - a real, if bounded (2D, footprint-
+level only), gouge-risk check.
 """
 
 from __future__ import annotations
@@ -100,6 +105,68 @@ def _holgura_disponible_saliente(pieza: Pieza, feature: Feature) -> float | None
     return min(holguras) if holguras else None
 
 
+def _extension_geometrica(feature: Feature) -> float | None:
+    """Radius of the smallest circle centered on this feature's own
+    position that contains its nominal shape - a barreno's own radius, or
+    the circumscribing half-diagonal for anything rectangular (cajera,
+    ranura, a rectangular saliente). None when there's nothing to measure
+    a footprint from (redondeo/chaflan are corner features, not
+    positioned; escalon spans a whole edge, not a point; perfil_exterior
+    has no geometry of its own - see builder.py). Used only by
+    _advertencias_features_cercanas below.
+    """
+    if feature.tipo in (TipoFeature.BARRENO, TipoFeature.BARRENO_ROSCADO):
+        return (feature.diametro_mm / 2) if feature.diametro_mm else None
+    if feature.tipo in (TipoFeature.CAJERA, TipoFeature.RANURA, TipoFeature.SALIENTE):
+        if feature.diametro_mm:
+            return feature.diametro_mm / 2
+        if feature.largo_mm and feature.ancho_mm:
+            return math.hypot(feature.largo_mm, feature.ancho_mm) / 2
+    return None
+
+
+def _advertencias_features_cercanas(operaciones_por_feature: list[tuple[Feature, rules.OperacionRecomendada]]) -> list[str]:
+    """Flags any two feature INSTANCES (individual positions, so this also
+    catches a too-tight pattern spacing, not just two different features)
+    whose toolpaths sit closer together than their own geometry plus their
+    assigned tool's radius need to avoid overlapping - the tool cutting
+    one could gouge into material that belongs to, or was already removed
+    by, its neighbor.
+
+    Deliberately bounded, real 2D geometry - NOT a full 3D collision
+    check (no tool holder, no fixture, no simultaneous/multi-axis motion),
+    just "would these two toolpath footprints overlap". A real machinist
+    still has to review the plan; this catches the case that's easy to
+    miss reading a plano by eye (two features positioned close enough
+    that only their combined tool clearance, not the features' own
+    outlines, actually overlaps).
+    """
+    instancias: list[tuple[Feature, object, float]] = []
+    for feature, op in operaciones_por_feature:
+        extension = _extension_geometrica(feature)
+        if extension is None:
+            continue
+        envolvente = extension + op.herramienta.diametro_mm / 2
+        for pos in feature.lista_posiciones():
+            instancias.append((feature, pos, envolvente))
+
+    advertencias = []
+    for i in range(len(instancias)):
+        f1, pos1, env1 = instancias[i]
+        for j in range(i + 1, len(instancias)):
+            f2, pos2, env2 = instancias[j]
+            distancia = math.hypot(pos1.x - pos2.x, pos1.y - pos2.y)
+            distancia_segura = env1 + env2
+            if distancia < distancia_segura:
+                advertencias.append(
+                    f"POSIBLE CHOQUE: {f1.tipo.value} (id={f1.id or '?'}) en ({pos1.x:.1f},{pos1.y:.1f}) y "
+                    f"{f2.tipo.value} (id={f2.id or '?'}) en ({pos2.x:.1f},{pos2.y:.1f}) estan a {distancia:.1f}mm "
+                    f"de distancia, pero sus trayectorias con herramienta necesitan al menos {distancia_segura:.1f}mm "
+                    "de separacion para no traslaparse - revisar manualmente antes de maquinar."
+                )
+    return advertencias
+
+
 @dataclass
 class PlanDetallado:
     plan: ToolpathPlan
@@ -156,6 +223,8 @@ def planear_trayectoria(pieza: Pieza, postprocesador: str | None = None) -> Plan
                 "usos": 0,
             }
         herramientas_usadas[clave_h]["usos"] += n_instancias
+
+    advertencias.extend(_advertencias_features_cercanas(operaciones_por_feature))
 
     plan = ToolpathPlan(
         estrategia=f"{len(operaciones)} operacion(es) planeadas sobre {len(pieza.features)} feature(s)",

@@ -1,5 +1,7 @@
 import math
 
+import pytest
+
 from app.cam.gcode import generar_codigo_g
 from app.cam.planner import planear_trayectoria
 from app.cam.simulate import simular_maquinado
@@ -139,6 +141,64 @@ def test_cajera_toolpath_se_mantiene_dentro_de_los_limites():
         # salir del rectangulo nominal de la cajera
         assert 40.0 <= x <= 60.0
         assert 20.0 <= y <= 40.0
+
+
+def test_cajera_entra_en_rampa_no_en_plunge_recto():
+    """A real customer question ("if I run this on the CNC, will it just
+    break the tool?") exposed that every Z descent here was a straight
+    G1 Z-only plunge - most end mills aren't rated to cut on-center like a
+    drill. Every descending move must now also move in XY (a real angled
+    ramp), and the tool must actually reach full depth before the pocket's
+    own perimeter pass starts (not stop short at some intermediate Z).
+    """
+    pieza = _placa_soporte()
+    plan = planear_trayectoria(pieza)
+    resultado = generar_codigo_g(pieza, plan)
+
+    lineas = resultado.contenido.splitlines()
+    inicio = next(i for i, l in enumerate(lineas) if "CAJERA" in l)
+    fin = next(i for i in range(inicio + 1, len(lineas)) if lineas[i].startswith("("))
+    bloque = lineas[inicio:fin]
+
+    descensos = [l for l in bloque if l.startswith("G1") and " Z" in l]
+    assert descensos, "se esperaban movimientos de descenso en la cajera"
+    for linea in descensos:
+        assert "X" in linea and "Y" in linea, f"descenso sin movimiento XY (plunge recto): {linea}"
+
+    # La cajera de 3mm de profundidad (una sola pasada) debe llegar exacto a Z-3.000
+    profundidades = [float(l.split("Z")[1].split(" ")[0]) for l in descensos]
+    assert min(profundidades) == pytest.approx(-3.0, abs=0.01)
+
+
+def test_advertencias_features_cercanas_detecta_barrenos_muy_juntos():
+    """Real, if bounded (2D footprint-level, not full 3D collision),
+    gouge-risk check: two features positioned close enough that only their
+    combined TOOL clearance (not their own nominal outlines) overlaps must
+    be flagged before the human approves the plan, not discovered by the
+    machine crashing into already-cut material.
+    """
+    pieza = Pieza(
+        pieza="placa_barrenos_juntos",
+        material=Material(nombre="Aluminio 6061"),
+        dimensiones=Dimensiones(forma_base=FormaBase.RECTANGULAR, largo_mm=100, ancho_mm=60, espesor_mm=10),
+        features=[
+            Feature(id="h1", tipo=TipoFeature.BARRENO, diametro_mm=10, posicion=Posicion2D(x=30, y=30)),
+            Feature(id="h2", tipo=TipoFeature.BARRENO, diametro_mm=10, posicion=Posicion2D(x=38, y=30)),
+            Feature(id="h3", tipo=TipoFeature.BARRENO, diametro_mm=8, posicion=Posicion2D(x=80, y=30)),
+        ],
+    )
+    plan = planear_trayectoria(pieza)
+
+    choques = [a for a in plan.plan.advertencias if "POSIBLE CHOQUE" in a]
+    assert len(choques) == 1
+    assert "h1" in choques[0] and "h2" in choques[0]
+    assert "h3" not in choques[0]
+
+
+def test_advertencias_features_cercanas_no_marca_patron_bien_espaciado():
+    pieza = _placa_soporte()  # f1 es un patron de 4 barrenos de 8mm, separados 70/30mm
+    plan = planear_trayectoria(pieza)
+    assert not any("POSIBLE CHOQUE" in a for a in plan.plan.advertencias)
 
 
 def test_perfil_exterior_genera_contorno_real_redondeado_en_las_esquinas():

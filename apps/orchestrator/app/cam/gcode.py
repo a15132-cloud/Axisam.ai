@@ -17,10 +17,23 @@ every decision here, straight from the project brief:
 2. Every file this function produces is stamped, top and bottom, as a
    simulation pending real Mastercam SDK verification. Capa 6 still
    requires human approval regardless, but the file itself must not be
-   mistakable for verified, machine-ready code - there is still no
-   gouge/collision checking across simultaneous features, no adaptive
-   roughing, and plunge entries are straight (a real post would ramp or
-   pre-drill).
+   mistakable for verified, machine-ready code.
+
+   Two specific gaps a real customer flagged directly are covered now:
+   entries into a pocket/contour/saliente-facing pass are ramped (angled
+   descent along the path's own first segment, see _movimientos_rampa),
+   not a straight Z-only plunge - drilling cycles (G81/G83) are
+   unaffected, a twist drill is designed to cut on-center. And
+   app.cam.planner._advertencias_features_cercanas flags any two
+   features whose toolpath footprints (own geometry + assigned tool
+   radius) are closer together than they need to be to avoid overlapping.
+
+   What's still NOT here, on purpose - this is real 2D geometry, not a
+   full CAM verification suite: no 3D tool-holder/fixture collision
+   check, no simultaneous-motion/multi-axis interference check, no
+   adaptive roughing. This file has never been run through a real
+   Mastercam post-processor or cut an actual piece of material - see
+   DISCLAIMER below, and Capa 6's mandatory human approval before export.
 """
 
 from __future__ import annotations
@@ -52,6 +65,7 @@ FEATURES_CON_CAJERA = {TipoFeature.CAJERA, TipoFeature.RANURA}
 FEATURES_CON_CONTORNO_PIEZA = {TipoFeature.PERFIL_EXTERIOR, TipoFeature.REDONDEO, TipoFeature.CHAFLAN}
 
 FEED_PLUNGE_FRACCION = 0.5  # plunge feed is a fraction of the XY cutting feed - conservative, not tuned per material
+ANGULO_RAMPA_GRADOS = 3.0  # conservative ramp-entry angle - real roughing entries typically run 1-3 degrees
 
 
 @dataclass
@@ -166,20 +180,68 @@ def _pasadas_z(profundidad_pasada: float, profundidad_total: float, z_top: float
     return [z_top - min(profundidad_pasada * (i + 1), profundidad_total) for i in range(n)]
 
 
+def _movimientos_rampa(pp: dict, op, punto_a: Punto, punto_b: Punto, z_inicio: float, z_fin: float) -> list[str]:
+    """Ramped (angled) entry from z_inicio down to z_fin, zigzagging along
+    the punto_a<->punto_b segment instead of plunging straight down on
+    Z alone. A twist drill cuts on-center by design (see _bloque_taladrado,
+    which correctly uses G81/G83 and is NOT touched by this) but most end
+    mills are not rated for that - a straight G1 Z-only plunge (the
+    previous behavior here) risks snapping the tool on anything but a very
+    soft material or a very shallow pass. Always ends back at punto_a (an
+    even number of traverses) so the caller's full-path pass can proceed
+    from there unchanged.
+
+    Scope note: this is entry motion only, computed from the two points of
+    the toolpath's own first segment - it doesn't know about any OTHER
+    feature's geometry, so it cannot by itself prevent a ramp from
+    crossing into a neighboring feature's material. See
+    planner._advertencias_features_cercanas for the (separate, 2D,
+    footprint-level) check for that.
+    """
+    dx, dy = punto_b[0] - punto_a[0], punto_b[1] - punto_a[1]
+    longitud_segmento = math.hypot(dx, dy)
+    profundidad = z_inicio - z_fin  # positive: descending
+    feed_rampa = op.parametros.avance_mm_min * FEED_PLUNGE_FRACCION
+    if longitud_segmento < 0.01 or profundidad <= 0:
+        # No usable XY room to ramp into (a degenerate single-point path,
+        # or nothing to descend) - fall back to the old straight plunge,
+        # but say so, rather than silently doing the one thing this
+        # function exists to avoid.
+        lineas = [f"G1 Z{z_fin:.3f} F{feed_rampa:.1f}"]
+        if longitud_segmento < 0.01 and profundidad > 0:
+            lineas.insert(0, _comentario(pp, "sin espacio en XY para rampa - entrada recta (revisar manualmente)"))
+        return lineas
+
+    dz_por_traverso = longitud_segmento * math.tan(math.radians(ANGULO_RAMPA_GRADOS))
+    n_traversos = max(1, math.ceil(profundidad / dz_por_traverso))
+    if n_traversos % 2 == 1:
+        n_traversos += 1  # par, para que el ultimo movimiento termine de vuelta en punto_a
+
+    lineas = []
+    for i in range(n_traversos):
+        z = z_inicio - profundidad * (i + 1) / n_traversos
+        destino = punto_b if i % 2 == 0 else punto_a
+        lineas.append(f"G1 X{destino[0]:.3f} Y{destino[1]:.3f} Z{z:.3f} F{feed_rampa:.1f}")
+    return lineas
+
+
 def _recorrer_puntos_multi_pasada(pp: dict, op, puntos: list[Punto], z_top: float = 0.0) -> list[str]:
     lineas = []
     profundidad_total = op.profundidad_total_mm or op.profundidad_pasada_mm or 1.0
     profundidad_pasada = op.profundidad_pasada_mm or profundidad_total
     lineas.append(f"G0 X{puntos[0][0]:.3f} Y{puntos[0][1]:.3f}")
     lineas.append(f"G0 Z{pp['plano_seguridad_mm']:.3f}")
+    lineas.append(f"G0 Z{z_top:.3f}")  # rapid down to the top of stock - still in air, not yet cutting
     zetas = _pasadas_z(profundidad_pasada, profundidad_total, z_top)
+    punto_rampa_b = puntos[1] if len(puntos) > 1 else puntos[0]
     for i, z in enumerate(zetas):
-        lineas.append(f"G1 Z{z:.3f} F{op.parametros.avance_mm_min * FEED_PLUNGE_FRACCION:.1f}")
+        lineas.extend(_movimientos_rampa(pp, op, puntos[0], punto_rampa_b, z_top, z))
         for x, y in puntos[1:]:
             lineas.append(f"G1 X{x:.3f} Y{y:.3f} F{op.parametros.avance_mm_min:.1f}")
         lineas.append(f"G0 Z{pp['plano_seguridad_mm']:.3f}")
         if i < len(zetas) - 1:
             lineas.append(f"G0 X{puntos[0][0]:.3f} Y{puntos[0][1]:.3f}")
+            lineas.append(f"G0 Z{z_top:.3f}")
     return lineas
 
 

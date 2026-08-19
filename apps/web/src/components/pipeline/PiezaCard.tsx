@@ -37,6 +37,37 @@ function numeroONulo(valor: string): number | null {
   return Number.isNaN(n) ? null : n;
 }
 
+// Que columnas de la tabla realmente afectan la geometria/el codigo G para
+// cada tipo de feature - un usuario real edito ancho_mm/largo_mm/profundidad_mm
+// en un barreno pasante (columnas que app/geometry/builder.py's _cortar_barreno
+// nunca lee - solo lee diametro_mm, y profundidad_mm se ignora cuando
+// pasante=True) y obtuvo el mismo STEP de siempre: el guardado SI funcionaba,
+// pero esos campos nunca tuvieron forma de cambiar el resultado. Mostrar una
+// casilla editable para un campo que no hace nada es peor que no mostrarla -
+// da la impresion de control donde no lo hay. Debe reflejar exactamente lo
+// que builder.py/gcode.py realmente leen, no lo que "podria" tener sentido.
+function campoAplica(f: Feature, campo: "diametro_mm" | "largo_mm" | "ancho_mm" | "profundidad_mm"): boolean {
+  switch (f.tipo) {
+    case "barreno":
+    case "barreno_roscado":
+      if (campo === "diametro_mm") return true;
+      if (campo === "profundidad_mm") return !f.pasante; // ignorado si es pasante - ver _cortar_barreno
+      return false; // largo_mm/ancho_mm nunca aplican a un barreno
+    case "cajera":
+    case "ranura":
+      return campo === "largo_mm" || campo === "ancho_mm" || campo === "profundidad_mm";
+    case "saliente":
+      return true; // diametro_mm O largo_mm+ancho_mm (segun sea circular o rectangular), y profundidad_mm - todos validos
+    case "escalon":
+      return campo === "ancho_mm" || campo === "profundidad_mm";
+    case "redondeo":
+    case "chaflan":
+      return false; // usan radio_mm (no esta en estas 4 columnas)
+    default:
+      return true; // tipo no reconocido - no restringir de mas
+  }
+}
+
 function ConfidenceBadge({ confianza }: { confianza: number }) {
   const tone = confianza >= 0.85 ? "ok" : confianza >= 0.6 ? "warn" : "danger";
   return <Badge tone={tone}>confianza {(confianza * 100).toFixed(0)}%</Badge>;
@@ -220,16 +251,38 @@ export function PiezaCard({ pieza, readOnly, verificando, onConfirmar, onGuardar
                           <td className="py-1.5 pr-2 text-[var(--color-text-muted)]">{i + 1}</td>
                           <td className="py-1.5 pr-2 capitalize text-[var(--color-text)]">{f.tipo.replace(/_/g, " ")}</td>
                           <td className="w-20 py-1.5 pr-2">
-                            <CeldaNumero valor={f.diametro_mm} onChange={(v) => actualizarFeature(i, { diametro_mm: v })} />
+                            {campoAplica(f, "diametro_mm") ? (
+                              <CeldaNumero valor={f.diametro_mm} onChange={(v) => actualizarFeature(i, { diametro_mm: v })} />
+                            ) : (
+                              <CeldaNoAplica />
+                            )}
                           </td>
                           <td className="w-20 py-1.5 pr-2">
-                            <CeldaNumero valor={f.largo_mm} onChange={(v) => actualizarFeature(i, { largo_mm: v })} />
+                            {campoAplica(f, "largo_mm") ? (
+                              <CeldaNumero valor={f.largo_mm} onChange={(v) => actualizarFeature(i, { largo_mm: v })} />
+                            ) : (
+                              <CeldaNoAplica />
+                            )}
                           </td>
                           <td className="w-20 py-1.5 pr-2">
-                            <CeldaNumero valor={f.ancho_mm} onChange={(v) => actualizarFeature(i, { ancho_mm: v })} />
+                            {campoAplica(f, "ancho_mm") ? (
+                              <CeldaNumero valor={f.ancho_mm} onChange={(v) => actualizarFeature(i, { ancho_mm: v })} />
+                            ) : (
+                              <CeldaNoAplica />
+                            )}
                           </td>
                           <td className="w-20 py-1.5 pr-2">
-                            <CeldaNumero valor={f.profundidad_mm} onChange={(v) => actualizarFeature(i, { profundidad_mm: v })} />
+                            {campoAplica(f, "profundidad_mm") ? (
+                              <CeldaNumero valor={f.profundidad_mm} onChange={(v) => actualizarFeature(i, { profundidad_mm: v })} />
+                            ) : (
+                              <CeldaNoAplica
+                                titulo={
+                                  (f.tipo === "barreno" || f.tipo === "barreno_roscado") && f.pasante
+                                    ? "No aplica - este barreno es pasante, atraviesa toda la pieza"
+                                    : undefined
+                                }
+                              />
+                            )}
                           </td>
                           {f.posiciones?.length ? (
                             <td className="py-1.5 pr-2 text-[var(--color-text-faint)]" colSpan={2}>
@@ -481,6 +534,24 @@ function CeldaNumero({ valor, onChange }: { valor: number | null | undefined; on
       onChange={(e) => onChange(numeroONulo(e.target.value))}
       placeholder="—"
       className={INPUT_CLASS}
+    />
+  );
+}
+
+// Una casilla editable para un campo que el motor de geometria/codigo G
+// nunca lee para este tipo de feature es peor que no mostrarla - ver
+// campoAplica. Deshabilitada de verdad (no solo con estilo) para que no
+// se pueda escribir ahi pensando que va a cambiar algo.
+function CeldaNoAplica({ titulo }: { titulo?: string }) {
+  return (
+    <input
+      type="text"
+      value=""
+      disabled
+      readOnly
+      title={titulo || "No aplica a este tipo de feature"}
+      placeholder="No aplica"
+      className={`${INPUT_CLASS} cursor-not-allowed opacity-40`}
     />
   );
 }

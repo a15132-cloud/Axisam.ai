@@ -43,6 +43,7 @@ export default function App() {
   const [enviando, setEnviando] = useState(false);
   const [confirmandoExtraccion, setConfirmandoExtraccion] = useState(false);
   const [confirmandoModelo, setConfirmandoModelo] = useState(false);
+  const [rechazando, setRechazando] = useState(false);
   const [buscandoMedidas, setBuscandoMedidas] = useState(false);
 
   useEffect(() => {
@@ -197,28 +198,26 @@ export default function App() {
     if (!proyecto) return;
     setConfirmandoModelo(true);
     try {
-      await api.confirmarModelo(proyecto.id);
-      await api.generarTrayectorias(proyecto.id);
-      const resultado = await api.simularMaquinado(proyecto.id);
-      aplicarProyecto(resultado.proyecto);
+      const actualizado = await api.confirmarModelo(proyecto.id);
+      aplicarProyecto(actualizado);
     } catch (err) {
-      setMensajesLibres((prev) => [...prev, errorEntry(err, "No se pudieron generar las trayectorias o la simulacion.")]);
+      setMensajesLibres((prev) => [...prev, errorEntry(err, "No se pudo confirmar el modelo.")]);
     } finally {
       setConfirmandoModelo(false);
     }
   }
 
-  async function aprobarFinal(aprobadoPor: string) {
-    if (!proyecto) return;
-    await api.aprobarFinal(proyecto.id, aprobadoPor);
-    const resultado = await api.exportarCodigoG(proyecto.id);
-    aplicarProyecto(resultado.proyecto);
-  }
-
   async function rechazar(motivo: string) {
     if (!proyecto) return;
-    const actualizado = await api.rechazar(proyecto.id, motivo);
-    aplicarProyecto(actualizado);
+    setRechazando(true);
+    try {
+      const actualizado = await api.rechazar(proyecto.id, motivo);
+      aplicarProyecto(actualizado);
+    } catch (err) {
+      setMensajesLibres((prev) => [...prev, errorEntry(err, "No se pudo rechazar el proyecto.")]);
+    } finally {
+      setRechazando(false);
+    }
   }
 
   async function enviarMensaje(texto: string) {
@@ -313,7 +312,7 @@ export default function App() {
                     enviando={enviando}
                     subiendo={subiendo}
                     generandoModelo={confirmandoExtraccion}
-                    generandoTrayectorias={confirmandoModelo}
+                    confirmandoModelo={confirmandoModelo}
                     onEnviarMensaje={enviarMensaje}
                     onSubirArchivo={subirArchivo}
                     actions={{
@@ -322,13 +321,12 @@ export default function App() {
                       onGuardarEdicionPieza: guardarEdicionPieza,
                       onBuscarMedidasFaltantes: buscarMedidasFaltantes,
                       onConfirmarModelo: confirmarModelo,
-                      onAprobarFinal: aprobarFinal,
                       onRechazar: rechazar,
                       confirmandoExtraccion,
                       confirmandoModelo,
+                      rechazando,
                       buscandoMedidas,
                       bridgeConectado: !!bridgeWindows,
-                      mastercamInstalado: !!bridgeWindows?.mastercam_instalado,
                     }}
                   />
                   <ModeloFlotante3D proyecto={proyecto} />

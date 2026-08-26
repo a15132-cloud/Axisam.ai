@@ -152,7 +152,6 @@ export const api = {
       status: string;
       anthropic_configurado: boolean;
       capa4_solidworks: string;
-      capa4_mastercam: string;
       bridge_windows: BridgeWindowsStatus | null;
       almacenamiento: AlmacenamientoStatus;
     }>(() => client.get("/health")),
@@ -201,26 +200,16 @@ export const api = {
       () => client.post(`/projects/${id}/generar-modelo-3d`),
       2
     ),
+  // Ultimo checkpoint - Axiscam es CAD-only ahora (plano -> STEP/STL), ya
+  // no planea trayectorias ni genera codigo G (ver el docstring de
+  // approval.confirmar_modelo en el backend). El motor de simulacion
+  // sigue existiendo, pero como una vista independiente donde el usuario
+  // sube SU PROPIO archivo .nc - ver SimulacionEstandaloneView.
   confirmarModelo: (id: string) => unwrap<Proyecto>(() => client.post(`/projects/${id}/confirmar-modelo`), 2),
 
-  generarTrayectorias: (id: string, postprocesador?: string) =>
-    unwrap<{ proyecto: Proyecto; plan: Proyecto["toolpath_plan"]; postprocesador: string }>(() =>
-      client.post(`/projects/${id}/generar-trayectorias`, { postprocesador })
-    ),
-
-  simularMaquinado: (id: string) =>
-    unwrap<{ proyecto: Proyecto; simulacion: Proyecto["simulacion"] }>(() => client.post(`/projects/${id}/simular-maquinado`)),
-
   activarSolidworks: (id: string) => unwrap<{ activado: boolean }>(() => client.post(`/projects/${id}/activar-solidworks`)),
-  abrirMastercam: (id: string) => unwrap<{ abierto: boolean }>(() => client.post(`/projects/${id}/abrir-mastercam`)),
 
-  aprobarFinal: (id: string, aprobado_por: string) => unwrap<Proyecto>(() => client.post(`/projects/${id}/aprobar-final`, { aprobado_por })),
   rechazar: (id: string, motivo?: string) => unwrap<Proyecto>(() => client.post(`/projects/${id}/rechazar`, { motivo })),
-
-  exportarCodigoG: (id: string) =>
-    unwrap<{ proyecto: Proyecto; archivo: string; operaciones_con_movimiento_real: number; operaciones_solo_planeadas: number; advertencias: string[] }>(
-      () => client.post(`/projects/${id}/exportar-codigo-g`)
-    ),
 
   chat: (id: string, mensaje: string) =>
     unwrap<{ proyecto: Proyecto; respuesta: string; herramientas_ejecutadas: string[] }>(() =>

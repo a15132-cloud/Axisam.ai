@@ -4,9 +4,6 @@ import type { ChatEntry, Pieza } from "../../lib/types";
 import { AxiscamLogo } from "../logo/AxiscamLogo";
 import { PiezaCard } from "../pipeline/PiezaCard";
 import { ModeloCard } from "../pipeline/ModeloCard";
-import { TrayectoriasCard } from "../pipeline/TrayectoriasCard";
-import { SimulacionCard } from "../pipeline/SimulacionCard";
-import { CodigoGCard } from "../pipeline/CodigoGCard";
 
 function formatoHora(ts: string) {
   try {
@@ -22,13 +19,12 @@ export interface ChatMessageActions {
   onGuardarEdicionPieza: (pieza: Pieza) => Promise<void>;
   onBuscarMedidasFaltantes: () => void;
   onConfirmarModelo: () => void;
-  onAprobarFinal: (aprobadoPor: string) => Promise<void>;
   onRechazar: (motivo: string) => Promise<void>;
   confirmandoExtraccion: boolean;
   confirmandoModelo: boolean;
+  rechazando: boolean;
   buscandoMedidas: boolean;
   bridgeConectado: boolean;
-  mastercamInstalado: boolean;
 }
 
 export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: ChatMessageActions }) {
@@ -98,30 +94,10 @@ export function ChatMessage({ entry, actions }: { entry: ChatEntry; actions: Cha
             featuresOmitidos={entry.featuresOmitidos}
             readOnly={entry.confirmado}
             confirming={actions.confirmandoModelo}
+            rechazando={actions.rechazando}
             onConfirmar={actions.onConfirmarModelo}
-            bridgeConectado={actions.bridgeConectado}
-            mastercamInstalado={actions.mastercamInstalado}
-          />
-        )}
-
-        {entry.kind === "trayectorias" && <TrayectoriasCard plan={entry.plan} postprocesador={entry.postprocesador} />}
-
-        {entry.kind === "simulacion" && (
-          <SimulacionCard
-            simulacion={entry.simulacion}
-            readOnly={entry.resuelto}
-            onAprobar={actions.onAprobarFinal}
             onRechazar={actions.onRechazar}
-          />
-        )}
-
-        {entry.kind === "codigo_g" && (
-          <CodigoGCard
-            proyectoId={actions.proyectoId}
-            archivos={entry.archivos}
-            operacionesConMovimientoReal={entry.operacionesConMovimientoReal}
-            operacionesSoloPlaneadas={entry.operacionesSoloPlaneadas}
-            advertencias={entry.advertencias}
+            bridgeConectado={actions.bridgeConectado}
           />
         )}
 

@@ -10,8 +10,8 @@ from app.storage import files as storage
 
 app = FastAPI(
     title="Axiscam Orchestrator",
-    description="Capa 2-6 del agente Axiscam: extraccion de planos, base de conocimiento, "
-    "puente de geometria, planeacion CAM y aprobacion humana.",
+    description="Capa 2-6 del agente Axiscam: extraccion de planos, puente de geometria y "
+    "aprobacion humana - lee un plano y construye el modelo solido 3D (STEP/STL) confirmado.",
     version="0.1.0",
 )
 
@@ -54,8 +54,6 @@ def health() -> dict:
         "anthropic_configurado": bool(settings.anthropic_api_key),
         "capa4_solidworks": "geometria simulada via cadquery/OpenCascade - se usa SolidWorks real automaticamente "
         "cuando apps/windows-bridge esta corriendo en la maquina del usuario (ver bridge_windows)",
-        "capa4_mastercam": "trayectorias simuladas basadas en reglas - se usara Mastercam real automaticamente "
-        "cuando el conector correspondiente este implementado en apps/windows-bridge (ver bridge_windows)",
         "bridge_windows": bridge,
         "almacenamiento": storage.diagnostico_almacenamiento(),
     }

@@ -36,7 +36,6 @@ interface SidebarProps {
 function EstadoBridge({ bridgeWindows }: { bridgeWindows: BridgeWindowsStatus | null }) {
   const conectado = !!bridgeWindows;
   const swOk = bridgeWindows?.solidworks_disponible;
-  const mcOk = bridgeWindows?.mastercam_disponible;
 
   const texto = !conectado
     ? "Bridge de Windows no detectado - usando motor simulado"
@@ -47,11 +46,10 @@ function EstadoBridge({ bridgeWindows }: { bridgeWindows: BridgeWindowsStatus | 
   return (
     <div
       className="flex items-center gap-2 border-t border-[var(--color-border)] px-4 py-3 text-[11px] text-[var(--color-text-faint)]"
-      title="apps/windows-bridge: conecta Axiscam a SolidWorks/Mastercam reales cuando corre en tu propia PC con Windows"
+      title="apps/windows-bridge: conecta Axiscam a SolidWorks real cuando corre en tu propia PC con Windows"
     >
       <Cable className={`h-3.5 w-3.5 shrink-0 ${swOk ? "text-[var(--color-ok)]" : "text-[var(--color-text-faint)]"}`} />
       <span className="min-w-0 flex-1 truncate">{texto}</span>
-      {conectado && mcOk && <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--color-ok)]" title="Mastercam también disponible" />}
     </div>
   );
 }

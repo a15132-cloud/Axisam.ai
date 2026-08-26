@@ -1,10 +1,14 @@
 """REST surface for the project pipeline.
 
-Split deliberately: pipeline-advancing actions (upload, the three approval
+Split deliberately: pipeline-advancing actions (upload, the two approval
 checkpoints, chat) are each their own endpoint rather than one generic
-"do the next thing" call, because the three approval endpoints are the
-actual Capa 6 safety mechanism - a UI button hits exactly one of them,
-never something the chat endpoint or the agent can trigger on its own.
+"do the next thing" call, because the approval endpoints are the actual
+Capa 6 safety mechanism - a UI button hits exactly one of them, never
+something the chat endpoint or the agent can trigger on its own.
+
+Scope: Axiscam builds the confirmed plano into a STEP/STL model and stops
+there - it no longer plans toolpaths or generates G-code (see
+app/agent/approval.py's module docstring).
 """
 
 from __future__ import annotations
@@ -73,20 +77,12 @@ class CrearProyectoBody(BaseModel):
     nombre: str = "Nuevo proyecto"
 
 
-class AprobarFinalBody(BaseModel):
-    aprobado_por: str
-
-
 class RechazarBody(BaseModel):
     motivo: str | None = None
 
 
 class ChatBody(BaseModel):
     mensaje: str
-
-
-class GenerarTrayectoriasBody(BaseModel):
-    postprocesador: str | None = None
 
 
 class RenombrarProyectoBody(BaseModel):
@@ -359,64 +355,15 @@ def activar_solidworks(project_id: str) -> dict:
     return {"activado": True}
 
 
-@router.post("/{project_id}/abrir-mastercam")
-def abrir_mastercam(project_id: str) -> dict:
-    """Launches Mastercam on the user's own machine and best-effort opens
-    the generated STEP file, via the local bridge. Unlike
-    activar_solidworks, this works even for a simulated model - Mastercam
-    never automated anything either way, so this is just a shortcut to
-    "open the app with the file", available whenever a STEP exists.
-    """
-    proyecto = _obtener_o_404(project_id)
-    step = next((a for a in proyecto.archivos if a.tipo == "step"), None)
-    if step is None:
-        raise HTTPException(status_code=409, detail="Todavia no hay un archivo STEP generado para este proyecto.")
-    ruta_absoluta = storage.ruta_archivo_generado(project_id, step.nombre).resolve()
-    try:
-        windows_bridge.abrir_mastercam(str(ruta_absoluta))
-    except windows_bridge.BridgeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
-    return {"abierto": True}
-
-
 @router.post("/{project_id}/confirmar-modelo")
 def confirmar_modelo(project_id: str) -> Proyecto:
+    """Second and now final checkpoint - see approval.confirmar_modelo's
+    docstring on why there's no third (trayectorias/codigo G) stage
+    after this one anymore.
+    """
     proyecto = _obtener_o_404(project_id)
     try:
         approval.confirmar_modelo(proyecto)
-    except approval.TransicionInvalida as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    storage.guardar_proyecto(proyecto)
-    return proyecto
-
-
-@router.post("/{project_id}/generar-trayectorias")
-def generar_trayectorias(project_id: str, body: GenerarTrayectoriasBody) -> dict:
-    proyecto = _obtener_o_404(project_id)
-    try:
-        resultado = handlers.generar_trayectorias(proyecto, body.postprocesador)
-    except handlers.PrecondicionNoCumplida as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    storage.guardar_proyecto(proyecto)
-    return {"proyecto": proyecto, **resultado}
-
-
-@router.post("/{project_id}/simular-maquinado")
-def simular_maquinado(project_id: str) -> dict:
-    proyecto = _obtener_o_404(project_id)
-    try:
-        resultado = handlers.simular_maquinado(proyecto)
-    except handlers.PrecondicionNoCumplida as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    storage.guardar_proyecto(proyecto)
-    return {"proyecto": proyecto, "simulacion": resultado}
-
-
-@router.post("/{project_id}/aprobar-final")
-def aprobar_final(project_id: str, body: AprobarFinalBody) -> Proyecto:
-    proyecto = _obtener_o_404(project_id)
-    try:
-        approval.aprobar_final(proyecto, body.aprobado_por)
     except approval.TransicionInvalida as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     storage.guardar_proyecto(proyecto)
@@ -429,17 +376,6 @@ def rechazar(project_id: str, body: RechazarBody) -> Proyecto:
     approval.rechazar(proyecto, body.motivo)
     storage.guardar_proyecto(proyecto)
     return proyecto
-
-
-@router.post("/{project_id}/exportar-codigo-g")
-def exportar_codigo_g(project_id: str) -> dict:
-    proyecto = _obtener_o_404(project_id)
-    try:
-        resultado = handlers.exportar_codigo_g(proyecto)
-    except handlers.PrecondicionNoCumplida as exc:
-        raise HTTPException(status_code=409, detail=str(exc)) from exc
-    storage.guardar_proyecto(proyecto)
-    return {"proyecto": proyecto, **resultado}
 
 
 @router.post("/{project_id}/chat")

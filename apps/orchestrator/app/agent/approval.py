@@ -1,17 +1,22 @@
-"""Capa 6 - the three mandatory human checkpoints.
+"""Capa 6 - the mandatory human checkpoints.
 
 These transitions are deliberately NOT tools the LLM can call. They are
 plain functions invoked only from dedicated REST endpoints that the
-frontend hits when a human clicks an explicit "Confirmar" / "Aprobar"
-button. The agent's tool-use loop can explain, summarize, and nudge the
-user toward confirming - it can never flip these flags itself. That
-split is the actual safety mechanism, not a prompt instruction that asks
-the model nicely not to skip the gate.
+frontend hits when a human clicks an explicit "Confirmar" button. The
+agent's tool-use loop can explain, summarize, and nudge the user toward
+confirming - it can never flip these flags itself. That split is the
+actual safety mechanism, not a prompt instruction that asks the model
+nicely not to skip the gate.
+
+Axiscam's product scope is deliberately CAD only now (plano -> confirmed
+data -> STEP/STL) - it no longer plans toolpaths or generates G-code (see
+app/cam/*.py's own docstrings: that engine still exists and is still
+tested, it's just not wired into this approval flow or the agent's tools
+anymore). So there are two checkpoints, not three: confirming the
+extraction, then confirming the model - which is also the final state.
 """
 
 from __future__ import annotations
-
-from datetime import datetime, timezone
 
 from app.schemas.project import Etapa, Proyecto
 
@@ -44,27 +49,18 @@ def editar_extraccion(proyecto: Proyecto) -> Proyecto:
 
 
 def confirmar_modelo(proyecto: Proyecto) -> Proyecto:
+    """Second and now LAST checkpoint - the STEP/STL already exist (built
+    before this call, gated on checkpoint 1), so confirming the model is
+    confirming the final deliverable. No more toolpath/G-code stage
+    follows this one - see this module's docstring.
+    """
     if proyecto.etapa != Etapa.ESPERANDO_CONFIRMACION_MODELO:
         raise TransicionInvalida(
             f"No se puede confirmar el modelo 3D desde la etapa '{proyecto.etapa.value}'"
         )
     proyecto.modelo_confirmado = True
-    proyecto.etapa = Etapa.GENERANDO_TRAYECTORIAS
-    proyecto.registrar_evento("Modelo 3D confirmado por el usuario")
-    return proyecto
-
-
-def aprobar_final(proyecto: Proyecto, aprobado_por: str) -> Proyecto:
-    if proyecto.etapa != Etapa.ESPERANDO_APROBACION_FINAL:
-        raise TransicionInvalida(
-            f"No se puede dar aprobacion final desde la etapa '{proyecto.etapa.value}' "
-            "(se requiere haber generado y revisado la simulacion de maquinado primero)"
-        )
-    proyecto.aprobacion_final = True
-    proyecto.aprobado_por = aprobado_por
-    proyecto.aprobado_en = datetime.now(timezone.utc)
     proyecto.etapa = Etapa.APROBADO
-    proyecto.registrar_evento("Aprobacion final otorgada", detalle=f"por {aprobado_por}")
+    proyecto.registrar_evento("Modelo 3D confirmado por el usuario - proyecto listo")
     return proyecto
 
 

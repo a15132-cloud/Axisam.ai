@@ -13,7 +13,7 @@ interface ChatPanelProps {
   enviando: boolean;
   subiendo: boolean;
   generandoModelo: boolean;
-  generandoTrayectorias: boolean;
+  confirmandoModelo: boolean;
   puedeChatear: boolean;
 }
 
@@ -50,16 +50,16 @@ export function ChatPanel({
   enviando,
   subiendo,
   generandoModelo,
-  generandoTrayectorias,
+  confirmandoModelo,
   puedeChatear,
 }: ChatPanelProps) {
-  const trabajando = enviando || subiendo || generandoModelo || generandoTrayectorias;
+  const trabajando = enviando || subiendo || generandoModelo || confirmandoModelo;
   const textoTrabajando = subiendo
     ? "Analizando el plano y sacando las medidas..."
     : generandoModelo
       ? "Generando el modelo 3D (STEP/STL)..."
-      : generandoTrayectorias
-        ? "Calculando trayectorias y simulación..."
+      : confirmandoModelo
+        ? "Confirmando el modelo..."
         : "Axiscam está escribiendo...";
   const [texto, setTexto] = useState("");
   const [archivoPendiente, setArchivoPendiente] = useState<File | null>(null);

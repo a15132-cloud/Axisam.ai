@@ -210,18 +210,6 @@ export type ChatEntry =
       featuresOmitidos: string[];
       confirmado: boolean;
     }
-  | { id: string; role: "assistant"; kind: "trayectorias"; ts: string; plan: ToolpathPlan; postprocesador?: string | null }
-  | { id: string; role: "assistant"; kind: "simulacion"; ts: string; simulacion: SimulacionResumen; resuelto: boolean }
-  | {
-      id: string;
-      role: "assistant";
-      kind: "codigo_g";
-      ts: string;
-      archivos: ArchivoGenerado[];
-      operacionesConMovimientoReal: number;
-      operacionesSoloPlaneadas: number;
-      advertencias: string[];
-    }
   | { id: string; role: "assistant"; kind: "error"; ts: string; texto: string };
 
 // Reported by GET /api/health via app/integrations/windows_bridge.py.

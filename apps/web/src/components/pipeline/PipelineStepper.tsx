@@ -1,13 +1,17 @@
 import { motion } from "framer-motion";
-import { Check, CircleDot, FileCode2, FileText, ShieldCheck, Box, Route } from "lucide-react";
+import { Check, CircleDot, FileText, ShieldCheck, Box } from "lucide-react";
 import type { Etapa } from "../../lib/types";
 
+// Solo dos etapas activas ahora - Axiscam es CAD only (plano -> STEP/STL),
+// ya no planea trayectorias ni genera codigo G (ver approval.py en el
+// backend). generando_trayectorias/simulando/esperando_aprobacion_final
+// siguen siendo valores validos del enum (proyectos viejos podrian tener
+// uno guardado) pero ningun flujo actual los alcanza - stepStatus cae a
+// "pending" para esos, no crashea.
 const STEPS: { key: string; label: string; icon: typeof FileText; etapas: Etapa[] }[] = [
   { key: "plano", label: "Plano", icon: FileText, etapas: ["plano_subido", "extrayendo", "esperando_confirmacion_extraccion"] },
   { key: "modelo", label: "Modelo 3D", icon: Box, etapas: ["modelando", "esperando_confirmacion_modelo"] },
-  { key: "trayectorias", label: "Trayectorias", icon: Route, etapas: ["generando_trayectorias", "simulando"] },
-  { key: "codigo_g", label: "Código G", icon: FileCode2, etapas: ["esperando_aprobacion_final"] },
-  { key: "aprobacion", label: "Aprobación", icon: ShieldCheck, etapas: ["aprobado"] },
+  { key: "aprobado", label: "Aprobado", icon: ShieldCheck, etapas: ["aprobado"] },
 ];
 
 function stepStatus(index: number, etapa: Etapa): "done" | "active" | "pending" {

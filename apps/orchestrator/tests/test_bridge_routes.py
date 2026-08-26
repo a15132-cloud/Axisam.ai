@@ -1,11 +1,15 @@
-"""POST /api/projects/{id}/activar-solidworks and /abrir-mastercam - the
-"Ver en SolidWorks" / "Abrir en Mastercam" buttons in the chat. Both proxy
-to the local Windows bridge (app.integrations.windows_bridge), which is
-never actually reachable in this test environment - so these tests cover
-the gating logic (no model yet / model was simulated, not real) that runs
-BEFORE the bridge is ever contacted, plus the "bridge unreachable" 502
-that's the honest, unmocked default everywhere except the user's own
-Windows shop-floor PC.
+"""POST /api/projects/{id}/activar-solidworks - the "Ver en SolidWorks"
+button in the chat. Proxies to the local Windows bridge
+(app.integrations.windows_bridge), which is never actually reachable in
+this test environment - so these tests cover the gating logic (no model
+yet / model was simulated, not real) that runs BEFORE the bridge is ever
+contacted, plus the "bridge unreachable" 502 that's the honest, unmocked
+default everywhere except the user's own Windows shop-floor PC.
+
+(The equivalent "Abrir en Mastercam" endpoint was removed along with
+G-code generation - see app/agent/approval.py's module docstring. The
+bridge function itself, windows_bridge.abrir_mastercam, is untouched and
+still covered in test_windows_bridge.py in case it's wired up again.)
 """
 
 from __future__ import annotations
@@ -78,28 +82,5 @@ def test_activar_solidworks_502_cuando_bridge_no_alcanzable(client):
     # real, unmocked failure mode for every machine except the user's own
     # Windows shop-floor PC (same pattern as test_windows_bridge.py).
     resp = client.post(f"/api/projects/{project_id}/activar-solidworks")
-
-    assert resp.status_code == 502
-
-
-def test_abrir_mastercam_404_si_no_existe_proyecto(client):
-    resp = client.post("/api/projects/AXC-NOEXISTE/abrir-mastercam")
-    assert resp.status_code == 404
-
-
-def test_abrir_mastercam_409_sin_step_generado(client):
-    project_id = _crear_proyecto(client)
-    resp = client.post(f"/api/projects/{project_id}/abrir-mastercam")
-    assert resp.status_code == 409
-
-
-def test_abrir_mastercam_502_cuando_bridge_no_alcanzable_incluso_si_es_simulado(client):
-    # Unlike activar-solidworks, abrir-mastercam doesn't care whether the
-    # model was simulated - Mastercam never automated anything either way,
-    # this is just "open the app with the file" (see MastercamService).
-    project_id = _crear_proyecto(client)
-    _agregar_archivo_step(client, project_id, es_simulacion=True)
-
-    resp = client.post(f"/api/projects/{project_id}/abrir-mastercam")
 
     assert resp.status_code == 502

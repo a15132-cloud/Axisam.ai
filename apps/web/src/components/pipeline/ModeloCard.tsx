@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import { Check, Download, ExternalLink, HelpCircle } from "lucide-react";
+import { Check, Download, ExternalLink, HelpCircle, XCircle } from "lucide-react";
 import { Button } from "../common/Button";
 import { WarningBanner } from "../common/WarningBanner";
 import { StlViewer } from "../viewer/StlViewer";
@@ -15,9 +15,10 @@ interface ModeloCardProps {
   featuresOmitidos: string[];
   readOnly?: boolean;
   onConfirmar?: () => void;
+  onRechazar?: (motivo: string) => Promise<void>;
   confirming?: boolean;
+  rechazando?: boolean;
   bridgeConectado?: boolean;
-  mastercamInstalado?: boolean;
 }
 
 export function ModeloCard({
@@ -27,9 +28,10 @@ export function ModeloCard({
   featuresOmitidos,
   readOnly,
   onConfirmar,
+  onRechazar,
   confirming,
+  rechazando,
   bridgeConectado,
-  mastercamInstalado,
 }: ModeloCardProps) {
   const stl = archivos.find((a) => a.tipo === "stl");
   const step = archivos.find((a) => a.tipo === "step");
@@ -37,7 +39,6 @@ export function ModeloCard({
   const esSimulacion = stl?.es_simulacion ?? step?.es_simulacion ?? true;
 
   const [activandoSw, setActivandoSw] = useState(false);
-  const [abriendoMc, setAbriendoMc] = useState(false);
   const [errorBridge, setErrorBridge] = useState<string | null>(null);
   const [omisionesRevisadas, setOmisionesRevisadas] = useState(false);
 
@@ -53,18 +54,6 @@ export function ModeloCard({
       setErrorBridge(err instanceof ApiError ? err.message : "No se pudo activar SolidWorks.");
     } finally {
       setActivandoSw(false);
-    }
-  }
-
-  async function abrirEnMastercam() {
-    setErrorBridge(null);
-    setAbriendoMc(true);
-    try {
-      await api.abrirMastercam(proyectoId);
-    } catch (err) {
-      setErrorBridge(err instanceof ApiError ? err.message : "No se pudo abrir Mastercam.");
-    } finally {
-      setAbriendoMc(false);
     }
   }
 
@@ -94,7 +83,7 @@ export function ModeloCard({
         {step && (
           <a href={api.archivoUrl(proyectoId, step.nombre)} download>
             <Button variant="secondary" icon={<Download className="h-3.5 w-3.5" />}>
-              Descargar STEP (SolidWorks / Mastercam)
+              Descargar STEP
             </Button>
           </a>
         )}
@@ -108,17 +97,6 @@ export function ModeloCard({
         {!esSimulacion && bridgeConectado && (
           <Button variant="secondary" icon={<ExternalLink className="h-3.5 w-3.5" />} onClick={verEnSolidworks} loading={activandoSw}>
             Ver en SolidWorks
-          </Button>
-        )}
-        {step && bridgeConectado && mastercamInstalado && (
-          <Button
-            variant="ghost"
-            icon={<ExternalLink className="h-3.5 w-3.5" />}
-            onClick={abrirEnMastercam}
-            loading={abriendoMc}
-            title="Abre Mastercam y trata de cargar el STEP - Mastercam no genera nada automatico todavia, esto solo te ahorra importarlo a mano"
-          >
-            Abrir en Mastercam
           </Button>
         )}
       </div>
@@ -166,7 +144,7 @@ export function ModeloCard({
       )}
 
       {!readOnly && (
-        <div className="mt-4">
+        <div className="mt-4 flex flex-wrap gap-2">
           <Button
             variant="primary"
             icon={<Check className="h-3.5 w-3.5" />}
@@ -175,8 +153,18 @@ export function ModeloCard({
             disabled={!puedeConfirmar}
             title={puedeConfirmar ? undefined : "Marca la casilla de arriba antes de confirmar el modelo"}
           >
-            Confirmar modelo y continuar a trayectorias
+            Confirmar modelo (proyecto listo)
           </Button>
+          {onRechazar && (
+            <Button
+              variant="danger"
+              icon={<XCircle className="h-3.5 w-3.5" />}
+              loading={rechazando}
+              onClick={() => onRechazar("Modelo rechazado por el usuario")}
+            >
+              Rechazar
+            </Button>
+          )}
         </div>
       )}
     </div>

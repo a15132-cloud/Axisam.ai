@@ -1,8 +1,8 @@
 import type { ChatEntry, Proyecto } from "./types";
 
 /**
- * Pipeline cards (extraction/model/toolpath/simulation/gcode) are derived
- * fresh from `proyecto` on every render instead of being appended
+ * Pipeline cards (extraction/model) are derived fresh from `proyecto` on
+ * every render instead of being appended
  * imperatively after each action. The pipeline is strictly sequential, so
  * fixed-order derivation is not a simplification that loses information -
  * it's the correct model, and it means there is no separate copy of
@@ -66,41 +66,10 @@ export function derivarEntriesPipeline(proyecto: Proyecto): ChatEntry[] {
     });
   }
 
-  if (proyecto.toolpath_plan) {
-    entries.push({
-      id: "trayectorias",
-      role: "assistant",
-      kind: "trayectorias",
-      ts: buscarTs(proyecto, "trayectorias planeadas"),
-      plan: proyecto.toolpath_plan,
-      postprocesador: proyecto.postprocesador,
-    });
-  }
-
-  if (proyecto.simulacion) {
-    entries.push({
-      id: "simulacion",
-      role: "assistant",
-      kind: "simulacion",
-      ts: buscarTs(proyecto, "simulacion de maquinado"),
-      simulacion: proyecto.simulacion,
-      resuelto: proyecto.aprobacion_final,
-    });
-  }
-
-  const gcode = proyecto.archivos.find((a) => a.tipo === "gcode");
-  if (gcode) {
-    entries.push({
-      id: "codigo_g",
-      role: "assistant",
-      kind: "codigo_g",
-      ts: buscarTs(proyecto, "codigo g exportado"),
-      archivos: [gcode],
-      operacionesConMovimientoReal: proyecto.codigo_g_resumen?.operaciones_con_movimiento_real ?? 0,
-      operacionesSoloPlaneadas: proyecto.codigo_g_resumen?.operaciones_solo_planeadas ?? 0,
-      advertencias: proyecto.codigo_g_resumen?.advertencias ?? [],
-    });
-  }
+  // No hay entries de trayectorias/simulacion/codigo_g - Axiscam es CAD
+  // only ahora (plano -> STEP/STL, ver approval.confirmar_modelo en el
+  // backend). proyecto.toolpath_plan/simulacion/codigo_g_resumen se
+  // quedan definidos en el schema pero nunca se llenan por este flujo.
 
   if (proyecto.etapa === "rechazado") {
     entries.push({

@@ -37,12 +37,6 @@ def test_confirmar_extraccion_fuera_de_orden_falla():
         approval.confirmar_extraccion(p)
 
 
-def test_aprobar_final_requiere_simulacion_previa():
-    p = _proyecto_recien_extraido()
-    with pytest.raises(approval.TransicionInvalida):
-        approval.aprobar_final(p, aprobado_por="taller@axiscam")
-
-
 # --- Capa 4 handlers: no deben avanzar sin el checkpoint humano correspondiente ---
 
 
@@ -52,14 +46,14 @@ def test_generar_modelo_3d_sin_confirmacion_lanza_precondicion():
         handlers.generar_modelo_3d(p)
 
 
-def test_pipeline_completo_respeta_los_tres_checkpoints(tmp_path, monkeypatch):
-    def _guardar_texto(project_id, nombre, contenido):
-        ruta = tmp_path / nombre
-        ruta.write_text(contenido)
-        return ruta
-
+def test_pipeline_completo_respeta_los_dos_checkpoints(tmp_path, monkeypatch):
+    """Axiscam's scope is CAD only (plano -> STEP/STL) - see
+    approval.confirmar_modelo's docstring. Confirming the model is the
+    LAST checkpoint now, not a gate before toolpath planning/G-code (that
+    engine still exists in app/cam/*.py and is still tested on its own in
+    test_cam.py, it's just not wired into this approval flow anymore).
+    """
     monkeypatch.setattr(handlers.storage, "ruta_archivo_generado", lambda project_id, nombre: tmp_path / nombre)
-    monkeypatch.setattr(handlers.storage, "guardar_texto", _guardar_texto)
 
     p = _proyecto_recien_extraido()
 
@@ -71,32 +65,10 @@ def test_pipeline_completo_respeta_los_tres_checkpoints(tmp_path, monkeypatch):
     assert resultado_modelo["archivos_generados"]
     assert p.etapa == Etapa.ESPERANDO_CONFIRMACION_MODELO
 
-    # generar trayectorias antes de confirmar el modelo debe fallar
-    with pytest.raises(handlers.PrecondicionNoCumplida):
-        handlers.generar_trayectorias(p)
-
-    # checkpoint 2
+    # checkpoint 2 - final
     approval.confirmar_modelo(p)
-    assert p.etapa == Etapa.GENERANDO_TRAYECTORIAS
-
-    handlers.generar_trayectorias(p)
-    assert p.toolpath_plan is not None
-
-    resumen = handlers.simular_maquinado(p)
-    assert resumen["es_simulacion"] is True
-    assert p.etapa == Etapa.ESPERANDO_APROBACION_FINAL
-
-    # exportar codigo G antes de la aprobacion final debe fallar
-    with pytest.raises(handlers.PrecondicionNoCumplida):
-        handlers.exportar_codigo_g(p)
-
-    # checkpoint 3
-    approval.aprobar_final(p, aprobado_por="taller@axiscam")
     assert p.etapa == Etapa.APROBADO
-
-    resultado_gcode = handlers.exportar_codigo_g(p)
-    assert resultado_gcode["es_simulacion"] is True
-    assert any(a.tipo == "gcode" for a in p.archivos)
+    assert p.modelo_confirmado is True
 
 
 # --- Capa 4 handlers deben preferir el bridge de Windows real cuando esta disponible ---

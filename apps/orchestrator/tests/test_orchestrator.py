@@ -92,20 +92,20 @@ def test_tool_call_exitoso_actualiza_proyecto(tmp_path, monkeypatch):
 
 
 def test_precondicion_no_cumplida_se_reporta_como_error_no_crashea():
-    p = _proyecto_confirmado()  # extraccion confirmada, pero NO el modelo -> generar_trayectorias debe fallar
+    p = Proyecto(nombre="placa_soporte")  # extraccion NI SIQUIERA confirmada -> generar_modelo_3d debe fallar
     client = _ScriptedClient(
         [
-            _respuesta_tool_use("call_1", "generar_trayectorias", {}),
-            _respuesta_texto("Aun no puedo generar trayectorias - primero confirma el modelo 3D en la interfaz."),
+            _respuesta_tool_use("call_1", "generar_modelo_3d", {}),
+            _respuesta_texto("Aun no puedo generar el modelo 3D - primero confirma la extraccion en la interfaz."),
         ]
     )
-    resultado = ejecutar_turno(p, "genera las trayectorias ya, dije que si en el chat", client=client)
+    resultado = ejecutar_turno(p, "genera el modelo ya, dije que si en el chat", client=client)
 
-    assert "confirma el modelo 3D" in resultado.texto_respuesta
+    assert "confirma la extraccion" in resultado.texto_respuesta
     # the tool_result the model saw must flag it as an error, and the project must NOT have advanced
     tool_result_msg = p.mensajes[2]["content"][0]
     assert tool_result_msg["is_error"] is True
-    assert p.modelo_confirmado is False
+    assert p.etapa != Etapa.ESPERANDO_CONFIRMACION_MODELO
 
 
 def test_no_llama_herramienta_desconocida_sin_crashear():
@@ -122,10 +122,10 @@ def test_no_llama_herramienta_desconocida_sin_crashear():
 
 
 def test_respeta_limite_de_iteraciones():
-    respuestas = [_respuesta_tool_use(f"call_{i}", "simular_maquinado", {}) for i in range(MAX_ITERACIONES_HERRAMIENTAS)]
+    respuestas = [_respuesta_tool_use(f"call_{i}", "generar_modelo_3d", {}) for i in range(MAX_ITERACIONES_HERRAMIENTAS)]
     client = _ScriptedClient(respuestas)
     p = Proyecto(nombre="x")
-    ejecutar_turno(p, "simula una y otra vez", client=client)
+    ejecutar_turno(p, "genera el modelo una y otra vez", client=client)
     assert len(client.llamadas) == MAX_ITERACIONES_HERRAMIENTAS
 
 

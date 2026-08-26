@@ -35,6 +35,19 @@ def diagnostico_almacenamiento() -> dict:
     tells apart the one scenario this project's users keep hitting: Render's
     "Free" plan silently giving `storage_dir` a normal, wiped-on-every-restart
     directory instead of the persistent disk render.yaml asks for.
+
+    "Not a separate mount point" is ONLY a real problem on a deployment that
+    actually expects an ephemeral container filesystem to be backed by a
+    persistent volume (Render et al - see `settings.storage_dir_debe_ser_persistente`,
+    only ever set true by render.yaml). On the desktop app (apps/desktop) or
+    plain local dev, `storage_dir` is a perfectly normal, permanently-on-disk
+    folder in the user's own filesystem - it will never be a separate mount
+    point, and that is completely fine, not a warning sign. Surfacing the
+    Render-flavored advertencia there anyway was a real bug (a desktop user
+    who never touched Render would see "confirma que el plan sea Starter en
+    Render" for a condition that isn't a problem at all) - gate it on the
+    same flag routes_projects.py already uses to decide whether a missing
+    mount point means anything.
     """
     base = _base_dir()
     try:
@@ -47,8 +60,8 @@ def diagnostico_almacenamiento() -> dict:
             "es_punto_de_montaje": None,
             "advertencia": "No se pudo verificar si el almacenamiento es persistente (error de sistema de archivos).",
         }
-    if es_punto_de_montaje:
-        return {"ruta": str(base), "es_punto_de_montaje": True, "advertencia": None}
+    if es_punto_de_montaje or not settings.storage_dir_debe_ser_persistente:
+        return {"ruta": str(base), "es_punto_de_montaje": es_punto_de_montaje, "advertencia": None}
     return {
         "ruta": str(base),
         "es_punto_de_montaje": False,

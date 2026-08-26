@@ -72,12 +72,12 @@ export function BotonNuevoProyecto({ creando, onClick }: { creando: boolean; onC
       onClick={onClick}
       disabled={creando}
       className="flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--color-accent)] px-3 py-3 text-sm font-semibold text-black transition-colors hover:bg-[var(--color-accent-2)] disabled:opacity-80 lg:py-2.5"
-      title={tardando ? "El servidor estaba dormido (plan gratis de Render) y está despertando - puede tardar hasta 50s" : undefined}
+      title={tardando ? "El backend está tardando más de lo normal en responder - puede seguir arrancando." : undefined}
     >
       {creando ? (
         <>
           <Loader2 className="h-4 w-4 animate-spin" />
-          {tardando ? "Despertando el servidor…" : "Creando…"}
+          {tardando ? "Esto está tardando más de lo normal…" : "Creando…"}
         </>
       ) : (
         <>

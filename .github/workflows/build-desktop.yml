@@ -18,6 +18,13 @@ on:
   push:
     tags:
       - "desktop-v*"
+    # TEMPORAL: dispara tambien en push a esta rama de trabajo, solo para
+    # que GitHub registre este workflow y se pueda correr una vez sin
+    # necesitar que ya exista en la rama default (workflow_dispatch no
+    # reconoce un workflow que nunca corrio - ver la nota honesta en
+    # apps/desktop/README.md). Se quita en cuanto quede validado.
+    branches:
+      - "claude/axiscam-verificacion-completa-1ufy63"
 
 jobs:
   build-windows:

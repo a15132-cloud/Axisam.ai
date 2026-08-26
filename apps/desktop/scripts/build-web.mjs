@@ -27,7 +27,18 @@ function ejecutar(cmd, args, cwd) {
 if (!existsSync(path.join(dirWeb, "node_modules"))) {
   ejecutar("npm", ["install"], dirWeb);
 }
-ejecutar("npm", ["run", "build"], dirWeb);
+ejecutar("npx", ["tsc", "-b"], dirWeb);
+// --base ./ (en vez del default "/" que usa el deploy normal en Vercel):
+// Electron carga index.html con win.loadFile(), es decir por file://, no
+// por http://. Con base "/" los assets quedan referenciados como
+// "/assets/x.js" - una ruta absoluta que file:// resuelve contra la RAIZ
+// del sistema de archivos, no contra la carpeta de index.html, y todo
+// carga en blanco (visto en vivo: "net::ERR_FILE_NOT_FOUND" en consola,
+// <div id="root"> se queda vacio). Con base relativa los assets quedan
+// como "./assets/x.js", que resuelve bien tanto por file:// como por
+// http:// - por eso solo el build de escritorio pasa este flag, el
+// deploy de Vercel (servido por http siempre) no lo necesita.
+ejecutar("npx", ["vite", "build", "--base", "./"], dirWeb);
 
 rmSync(dirDestino, { recursive: true, force: true });
 mkdirSync(dirDestino, { recursive: true });

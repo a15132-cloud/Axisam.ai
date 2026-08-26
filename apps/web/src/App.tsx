@@ -7,6 +7,7 @@ import { AxiscamLogo } from "./components/logo/AxiscamLogo";
 import { ModeloFlotante3D } from "./components/pipeline/ModeloFlotante3D";
 import { SimulacionEstandaloneView } from "./components/simulation/SimulacionEstandaloneView";
 import { api, ApiError } from "./lib/api";
+import { esElectron } from "./lib/isElectron";
 import { derivarEntriesPipeline } from "./lib/deriveEntries";
 import type { AlmacenamientoStatus, BridgeWindowsStatus, ChatEntry, Pieza, Proyecto } from "./lib/types";
 
@@ -266,23 +267,41 @@ export default function App() {
 
         {backendAlcanzable === false && (
           <div className="border-b border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-3 text-center text-xs text-[var(--color-danger)]">
-            No se pudo conectar con el backend — esta pantalla solo es la interfaz, y todavía no
-            encuentra el servicio que hace el trabajo real. Lo más probable es que el backend
-            (<code className="font-mono">apps/orchestrator</code>) no esté desplegado todavía, o que{" "}
-            <code className="font-mono">VITE_API_BASE_URL</code> en Vercel no apunte a su URL
-            correcta. Sigue la sección "Desplegar a producción" del README del proyecto — son 2
-            pasos.
+            {esElectron() ? (
+              // Dentro de Electron, main.js ya espera a que el backend local
+              // responda antes de abrir esta ventana - llegar a este estado
+              // solo pasa si el proceso local murió DESPUES de abrir (p.ej.
+              // el antivirus lo cerró a medio uso). El texto de "revisa el
+              // despliegue en Vercel/Render" de abajo seria una instruccion
+              // sin sentido aqui - un usuario de escritorio nunca desplegó
+              // nada.
+              <>No se pudo conectar con el motor local de Axiscam. Cierra Axiscam por completo y vuelve a
+              abrirlo - si el problema sigue, revisa que tu antivirus no lo esté bloqueando.</>
+            ) : (
+              <>
+                No se pudo conectar con el backend — esta pantalla solo es la interfaz, y todavía no
+                encuentra el servicio que hace el trabajo real. Lo más probable es que el backend
+                (<code className="font-mono">apps/orchestrator</code>) no esté desplegado todavía, o que{" "}
+                <code className="font-mono">VITE_API_BASE_URL</code> en Vercel no apunte a su URL
+                correcta. Sigue la sección "Modo avanzado" del README del proyecto — son 2 pasos.
+              </>
+            )}
           </div>
         )}
 
-        {almacenamiento?.es_punto_de_montaje === false && (
+        {almacenamiento?.advertencia && (
+          // El backend (app/storage/files.py::diagnostico_almacenamiento) ya
+          // decide si "no es un punto de montaje separado" es realmente un
+          // problema - eso SOLO importa en un deploy que espera un disco
+          // persistente real (Render con AXISCAM_STORAGE_PERSISTENTE=true).
+          // En la app de escritorio o en dev local, `advertencia` viene null
+          // a propósito (una carpeta normal en el disco del usuario nunca es
+          // un punto de montaje separado, y eso es completamente normal ahí)
+          // - mostrar este banner solo cuando el backend mismo dice que sí
+          // aplica evita el bug real que hubo: la app de escritorio mostraba
+          // "confirma tu plan en Render" a alguien que nunca tocó Render.
           <div className="border-b border-[var(--color-danger)]/40 bg-[var(--color-danger)]/10 px-4 py-3 text-center text-xs text-[var(--color-danger)]">
-            ⚠ El servidor NO tiene almacenamiento persistente conectado — los proyectos, planos, STEP,
-            STL y código G que generes AHORA se van a borrar en el próximo reinicio o redeploy del
-            backend. En Render, entra a tu servicio → Settings → confirma que el plan sea{" "}
-            <strong>"Starter"</strong> (no "Free") y que tenga un disco montado en{" "}
-            <code className="font-mono">/data</code> — ver el bloque <code className="font-mono">disk:</code>{" "}
-            de <code className="font-mono">render.yaml</code>.
+            ⚠ {almacenamiento.advertencia}
           </div>
         )}
 

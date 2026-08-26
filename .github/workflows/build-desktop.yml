@@ -1,0 +1,58 @@
+name: Build Axiscam Desktop (Windows)
+
+# Por que solo Windows por ahora: apps/desktop/scripts/vendor-backend-windows.ps1
+# es el unico script de vendorizado del backend que existe (ver
+# apps/desktop/README.md - "Limitaciones conocidas"). Un build de Mac/Linux
+# sin su propio backend vendorizado produciria un instalador que abre una
+# ventana vacia sin poder generar nada - preferible no publicarlo hasta que
+# exista ese script, en vez de repartir algo que se ve terminado pero no
+# funciona.
+#
+# Esto es tambien la unica forma real de validar
+# cadquery/cadquery-ocp (el kernel de geometria) dentro de un Python
+# portable en Windows - el resto de este proyecto se preparo desde un
+# sandbox Linux sin Windows disponible para probarlo directamente.
+
+on:
+  workflow_dispatch: {}
+  push:
+    tags:
+      - "desktop-v*"
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - uses: astral-sh/setup-uv@v3
+
+      - name: Instalar dependencias de apps/orchestrator (para exportar requirements)
+        working-directory: apps/orchestrator
+        run: uv sync --frozen --no-dev
+
+      - name: Instalar dependencias de apps/desktop
+        working-directory: apps/desktop
+        run: npm install
+
+      - name: Compilar apps/web + vendorizar backend + empaquetar instalador
+        working-directory: apps/desktop
+        run: npm run dist:win
+
+      - name: Subir instalador como artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: axiscam-windows-installer
+          path: apps/desktop/dist/*.exe
+          if-no-files-found: error
+
+      - name: Publicar Release (solo en tags desktop-v*)
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: apps/desktop/dist/*.exe
+          generate_release_notes: true

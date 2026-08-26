@@ -1,3 +1,14 @@
+# LEGADO/OPCIONAL: esto despliega Axiscam como app web con un backend
+# siempre encendido en Render - el modo "avanzado" documentado en el README
+# principal (sección "Modo avanzado: correr Axiscam como app web"). Ya NO es
+# la forma recomendada de correr Axiscam: un servicio siempre encendido
+# puede quedarse dormido o reiniciarse a mitad de una petición (el origen
+# real de los errores "no se pudo contactar al servidor" que llevaron a
+# migrar al modo principal, la app de escritorio en apps/desktop - cero
+# servidor remoto del que depender para generar el modelo 3D). Este archivo
+# se deja funcional para quien de verdad quiera seguir auto-hospedando la
+# app web, no se borra.
+#
 # Render Blueprint: despliega apps/orchestrator (el backend Python) con un
 # clic. En Render: "New +" -> "Blueprint" -> conecta este repo -> Render lee
 # este archivo automáticamente y crea el servicio.

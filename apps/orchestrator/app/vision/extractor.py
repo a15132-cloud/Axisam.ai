@@ -223,7 +223,13 @@ def _cliente_anthropic(client: anthropic.Anthropic | None) -> anthropic.Anthropi
     # 60s per attempt is generous for a single vision call (even with
     # extended thinking) and keeps the worst case bounded and predictable
     # instead of open-ended.
-    return client or anthropic.Anthropic(api_key=settings.anthropic_api_key, max_retries=5, timeout=60.0)
+    return client or anthropic.Anthropic(
+        api_key=settings.anthropic_api_key,
+        base_url=settings.anthropic_base_url,
+        default_headers=settings.anthropic_default_headers or None,
+        max_retries=5,
+        timeout=60.0,
+    )
 
 
 def extraer_primera_pasada(

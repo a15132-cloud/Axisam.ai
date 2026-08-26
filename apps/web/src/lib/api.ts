@@ -2,10 +2,12 @@ import axios from "axios";
 import type { AlmacenamientoStatus, BridgeWindowsStatus, MaterialKB, Pieza, PostprocesadorKB, Proyecto } from "./types";
 
 // In local dev, Vite's proxy (vite.config.ts) forwards "/api" to the backend
-// on :8001, so the default same-origin path works with no configuration. In
-// production (e.g. Vercel, which only serves this static frontend - it can't
-// run the Python backend) there is no backend at this origin, so the real
-// backend URL must be provided at build time via VITE_API_BASE_URL.
+// on :8001, so the default same-origin path works with no configuration.
+// The desktop build (apps/desktop) bakes VITE_API_BASE_URL to its local
+// backend process (http://127.0.0.1:8731/api) at build time - see
+// apps/desktop/scripts/build-web.mjs. Self-hosting this as a plain web app
+// (advanced/optional path, see README) also needs VITE_API_BASE_URL set to
+// wherever that separately-deployed backend lives.
 const baseURL = import.meta.env.VITE_API_BASE_URL || "/api";
 
 if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
@@ -16,10 +18,10 @@ if (import.meta.env.PROD && !import.meta.env.VITE_API_BASE_URL) {
   );
 }
 
-// Render (plan gratis) puede tardar hasta ~50s en despertar tras estar
-// inactivo. Sin un timeout, una peticion en un celular con red inestable
-// puede quedarse colgada indefinidamente sin dar ningun error - el boton
-// que la disparo se ve "no cargado" para siempre en vez de fallar y avisar.
+// El caso mas comun hoy es el backend local que arranca apps/desktop - un
+// timeout generoso igual protege contra el primer arranque en una compu
+// lenta (el motor de geometria tarda un momento en cargar) sin dejar un
+// boton "colgado" para siempre si de verdad algo esta mal.
 const client = axios.create({ baseURL, timeout: 90000 });
 
 // subirPlano y chat hacen una o dos llamadas REALES a Claude en el backend
@@ -41,35 +43,34 @@ export class ApiError extends Error {
 
 // Browsers deliberately hide the REASON a cross-origin request failed from
 // JavaScript (a security feature, not a bug) - axios/fetch both just see
-// "Network Error" whether the server is genuinely unreachable (down, wrong
-// URL, DNS) or briefly mid-restart (a deploy cutover: the in-flight request
-// dropped, but a follow-up probe fired a moment later lands on the new,
-// already-answering instance). CORS used to be a third possibility here, but
-// the backend now sends allow_origins=["*"] unconditionally (see
-// app/main.py) - a real CORS block from THIS backend is no longer possible,
-// so a message that confidently blamed "CORS/AXISCAM_CORS_ORIGINS" was
-// actively misleading here now, telling a non-technical user to go find a
-// server admin to fix a setting that isn't the actual problem anymore.
+// "Network Error" whether the backend is genuinely unreachable or briefly
+// mid-restart (the in-flight request dropped, but a follow-up probe fired a
+// moment later lands on the already-answering process again). In the
+// desktop build (apps/desktop) that backend is a local child process on
+// 127.0.0.1 - "genuinely unreachable" there almost always means it hasn't
+// finished starting yet or was closed, not a remote outage. CORS used to be
+// a third possibility here, but the backend now sends
+// allow_origins=["*"] unconditionally (see app/main.py) - a real CORS block
+// from THIS backend is no longer possible.
 //
 // The workaround: a `mode: "no-cors"` fetch to the SAME url still performs
-// the real network request (DNS, TCP, TLS) - it only refuses to let JS read
-// the response body/headers. So it resolves if the server answers at all,
-// and rejects only if the network layer itself failed right now too. That's
-// still useful signal - "the server is reachable this instant" vs. "it
-// isn't" - just not proof of CORS specifically anymore.
+// the real network request (DNS/TCP/TLS, or a local socket connect for
+// 127.0.0.1) - it only refuses to let JS read the response body/headers. So
+// it resolves if the backend answers at all, and rejects only if the
+// connection itself failed right now too.
 async function diagnosticarNetworkError(): Promise<string> {
   try {
     await fetch(`${baseURL}/health`, { mode: "no-cors", signal: AbortSignal.timeout(6000) });
     return (
-      "El servidor respondió en este momento, pero la petición anterior se cortó a medio camino - probablemente " +
-      "el servidor se estaba reiniciando por una actualización justo en ese instante. No es tu internet ni tu " +
-      "proyecto se perdió. Intenta de nuevo."
+      "El backend de Axiscam respondió en este momento, pero la petición anterior se cortó a medio camino - " +
+      "probablemente se reinició justo en ese instante (por ejemplo, si Axiscam recién se abrió y el motor local " +
+      "todavía estaba arrancando). No es tu internet ni tu proyecto se perdió - intenta de nuevo."
     );
   } catch {
     return (
-      "No se pudo contactar al servidor en absoluto (puede estar apagado, redesplegando, o la dirección " +
-      "configurada está mal) - no parece ser tu conexión a internet. Espera un minuto e intenta de nuevo; " +
-      "si sigue igual, quien administra el servidor debe revisarlo."
+      "No se pudo contactar al backend de Axiscam en absoluto. Si estás usando la app de escritorio, cierra " +
+      "Axiscam por completo (no solo la ventana) y vuelve a abrirlo - el motor local puede haberse cerrado o " +
+      "haber tardado más de lo normal en arrancar. Si el problema sigue después de reabrir, reinstala Axiscam."
     );
   }
 }
@@ -97,47 +98,45 @@ function unwrap<T>(fn: () => Promise<{ data: T }>, reintentosRestantes = 1): Pro
       if (err instanceof ApiError) throw err;
       if (err?.code === "ECONNABORTED" || /timeout/i.test(err?.message ?? "")) {
         throw new ApiError(
-          "El servidor está tardando más de lo normal en responder (puede estar despertando tras estar inactivo). Intenta de nuevo en unos segundos."
+          "El backend de Axiscam está tardando más de lo normal en responder. Intenta de nuevo en unos segundos."
         );
       }
       if (err?.message === "Network Error") {
         if (reintentosRestantes > 0) {
           // Mismo caso que el 503 de abajo: un "Network Error" que resulta
-          // ser una actualizacion del servidor en curso (ver
-          // diagnosticarNetworkError) se resuelve solo en un par de
-          // segundos - reintentar antes de mostrar cualquier mensaje evita
-          // que el usuario vea un error por algo que ya no es cierto para
-          // cuando lo lee.
+          // ser un reinicio breve del backend (ver diagnosticarNetworkError)
+          // se resuelve solo en un par de segundos - reintentar antes de
+          // mostrar cualquier mensaje evita que el usuario vea un error por
+          // algo que ya no es cierto para cuando lo lee.
           await new Promise((resolve) => setTimeout(resolve, 3000));
           return unwrap(fn, reintentosRestantes - 1);
         }
         throw new ApiError(await diagnosticarNetworkError());
       }
       const status = err?.response?.status;
-      // 502/503/504 are gateway/proxy-level errors (Render restarting,
-      // deploying, or briefly overloaded) - the response body at that layer
-      // is Render's own raw error page (plain text/HTML, e.g. "502 Bad
-      // Gateway ... Request ID: ..."), never something this app wrote. That
-      // raw text must NEVER reach the chat verbatim - a non-technical user
-      // has no way to act on "Request ID: a298dcaa..." - so these three
-      // codes always get the same clear, actionable message regardless of
-      // whatever text happened to be in the response body.
+      // 502/503/504 son errores de gateway/proxy (un reinicio breve del
+      // backend, o un proxy intermedio saturado momentaneamente) - el
+      // cuerpo de esa respuesta suele ser una pagina de error cruda de la
+      // infraestructura de por medio (texto plano/HTML, nunca algo que esta
+      // app haya escrito). Ese texto crudo nunca debe llegar tal cual al
+      // chat - un usuario no tecnico no puede actuar sobre eso - asi que
+      // estos tres codigos siempre reciben el mismo mensaje claro y
+      // accionable sin importar que traiga el cuerpo de la respuesta.
       if (status === 503 && reintentosRestantes > 0) {
         // 503 aqui siempre significa una condicion que el backend mismo ya
-        // identifico como transitoria (almacenamiento reconectando tras una
-        // actualizacion del servidor, servicio despertando) - ver
-        // _obtener_o_404 en routes_projects.py. Un reintento automatico
-        // despues de una pausa corta resuelve la enorme mayoria sin que el
-        // usuario vea nada, en vez de un error confuso por algo que se
-        // arregla solo en un par de segundos. Nunca se reintenta on 502/504
-        // (timeouts genuinos de un intento que de verdad tardo demasiado -
-        // reintentar de inmediato ahi solo duplicaria la espera).
+        // identifico como transitoria (ver _obtener_o_404 en
+        // routes_projects.py). Un reintento automatico despues de una pausa
+        // corta resuelve la enorme mayoria sin que el usuario vea nada, en
+        // vez de un error confuso por algo que se arregla solo en un par de
+        // segundos. Nunca se reintenta en 502/504 (timeouts genuinos de un
+        // intento que de verdad tardo demasiado - reintentar de inmediato
+        // ahi solo duplicaria la espera).
         await new Promise((resolve) => setTimeout(resolve, 3000));
         return unwrap(fn, reintentosRestantes - 1);
       }
       if (status === 502 || status === 503 || status === 504) {
         throw new ApiError(
-          "El servidor no respondió a tiempo (puede estar reiniciando o despertando tras estar inactivo). Espera unos segundos y vuelve a intentar - tu plano/proyecto no se perdió.",
+          "El backend de Axiscam no respondió a tiempo (puede haberse reiniciado justo ahora). Espera unos segundos y vuelve a intentar - tu plano/proyecto no se perdió.",
           status
         );
       }
@@ -224,11 +223,12 @@ export const api = {
   // as everything else, instead of handing its raw URL straight to an
   // <iframe>/<img src>. A direct src= is a native browser request that
   // completely bypasses unwrap()/diagnosticarNetworkError() - if the backend
-  // 502s (cold start, redeploy) an <iframe> just renders Render's own raw
-  // error page as if it were the plano's content, exactly where the user
-  // expects to see the file they uploaded. Fetching it as a blob first means
-  // a failure surfaces as the same clean, actionable ApiError message used
-  // everywhere else, never raw HTML in the one place it's most confusing.
+  // 502s (a brief restart) an <iframe> just renders the raw error page from
+  // whatever infra sits in front of it as if it were the plano's content,
+  // exactly where the user expects to see the file they uploaded. Fetching
+  // it as a blob first means a failure surfaces as the same clean,
+  // actionable ApiError message used everywhere else, never raw HTML in the
+  // one place it's most confusing.
   obtenerPlanoOriginalBlob: async (id: string): Promise<Blob> => {
     try {
       const res = await client.get(`/projects/${id}/plano-original`, { responseType: "blob" });
@@ -237,14 +237,14 @@ export const api = {
       const axiosErr = err as { response?: { data?: unknown; status?: number }; message?: string; code?: string };
       const status = axiosErr.response?.status;
       if (axiosErr.code === "ECONNABORTED" || /timeout/i.test(axiosErr.message ?? "")) {
-        throw new ApiError("El servidor está tardando más de lo normal en responder. Intenta de nuevo en unos segundos.");
+        throw new ApiError("El backend de Axiscam está tardando más de lo normal en responder. Intenta de nuevo en unos segundos.");
       }
       if (axiosErr.message === "Network Error") {
         throw new ApiError(await diagnosticarNetworkError());
       }
       if (status === 502 || status === 503 || status === 504) {
         throw new ApiError(
-          "El servidor no respondió a tiempo (puede estar reiniciando o despertando). Espera unos segundos y vuelve a intentar.",
+          "El backend de Axiscam no respondió a tiempo (puede haberse reiniciado justo ahora). Espera unos segundos y vuelve a intentar.",
           status
         );
       }

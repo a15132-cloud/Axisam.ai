@@ -1,0 +1,35 @@
+{
+  "name": "axiscam-desktop",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Axiscam como app de escritorio - envuelve apps/web y arranca apps/orchestrator localmente, sin servidor remoto.",
+  "main": "main.js",
+  "scripts": {
+    "build:web": "node scripts/build-web.mjs",
+    "vendor:backend:win": "powershell -ExecutionPolicy Bypass -File scripts/vendor-backend-windows.ps1",
+    "start": "npm run build:web && electron .",
+    "dist:win": "npm run build:web && npm run vendor:backend:win && electron-builder --win"
+  },
+  "devDependencies": {
+    "electron": "^33.0.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "ai.axisam.axiscam",
+    "productName": "Axiscam",
+    "files": ["main.js", "package.json"],
+    "extraResources": [
+      { "from": "resources/web-dist", "to": "web-dist" },
+      { "from": "resources/backend", "to": "backend" }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "mac": {
+      "target": "dmg"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  }
+}

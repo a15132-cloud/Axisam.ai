@@ -37,10 +37,16 @@ verificado, y cómo terminar el conector de Mastercam.
 
 ```
 apps/
-  orchestrator/   Backend Python (FastAPI) - Capas 2, 3, 4, 5, 6
+  desktop/        App de escritorio (Electron) - la forma principal de correr Axiscam hoy,
+                  ver apps/desktop/README.md
+  orchestrator/   Backend Python (FastAPI) - Capas 2, 3, 4, 5, 6 - el mismo proceso corre
+                  local (dentro de apps/desktop) o remoto (modo avanzado/web)
   web/            Frontend React - Capa 1
   windows-bridge/ Servicio .NET opcional - conecta la Capa 4 a SolidWorks/Mastercam reales
                   en la PC Windows del usuario (ver apps/windows-bridge/README.md)
+api/
+  relay/          Función Edge de Vercel que oculta la API key real de Anthropic detrás de
+                  la app de escritorio - ver apps/relay/README.md
 docs/
   architecture.md Detalle técnico de cada capa y el plan de migración a SolidWorks/Mastercam reales
 ```
@@ -86,7 +92,47 @@ uv run pytest
 La interfaz es responsiva: en celular, el menú de proyectos se abre como panel deslizable y el
 panel de plano/vista 3D/actividad se accede con una pestaña "Detalles" junto al chat.
 
-## Desplegar a producción
+## Descargar Axiscam (app de escritorio)
+
+Esta es la forma principal de usar Axiscam hoy: **no hay servidor remoto del
+que depender**. La gente entra a la página de descargas, instala Axiscam, y
+listo - el modelado 3D (`cadquery`/OpenCascade generando STEP/STL real),
+el guardado de proyectos, y la simulación de trayectorias corren
+**100% localmente** en su propia compu. Lo único que sigue saliendo a
+internet es la llamada a Claude (leer un plano, chatear) - y esa pasa por
+un relay mínimo que oculta la key real, nunca directo con una key embebida
+en el instalador (ver `apps/relay/README.md` para el porqué).
+
+Este cambio existe porque la versión anterior (frontend en Vercel + backend
+en Render) causaba justo el error que probablemente te trajo a leer esto:
+"no se pudo contactar al servidor" o "la petición se cortó a medio camino"
+cada vez que Render reiniciaba el servicio - un servidor que puede estar
+dormido o redesplegando en cualquier momento es un punto de falla que una
+app de escritorio simplemente no tiene.
+
+- **Construir el instalador de Windows**: ver `apps/desktop/README.md`
+  (`cd apps/desktop && npm install && npm run dist:win`). También hay un
+  workflow de CI (`.github/workflows/build-desktop.yml`) que produce el
+  mismo instalador en `windows-latest` sin necesitar una PC Windows a la
+  mano.
+- **Correrlo en modo desarrollo**: `cd apps/desktop && npm install && npm start`
+  arranca el backend real y abre la ventana, sin necesidad de empaquetar nada.
+- **Limitaciones conocidas de esta primera versión** (léelas antes de
+  repartir el instalador a alguien): están documentadas sin rodeos en
+  `apps/desktop/README.md` - el riesgo más grande es que el empaquetado con
+  `cadquery`/OpenCascade en un Python portable de Windows se escribió con
+  cuidado pero no se pudo validar de punta a punta en una PC Windows real
+  desde este entorno de desarrollo.
+- Mac/Linux están declarados como targets de empaquetado pero **no
+  probados todavía** - el script de vendorizado del backend por ahora solo
+  existe para Windows (la plataforma que se pidió como prioridad).
+
+### Modo avanzado: correr Axiscam como app web (opcional)
+
+Si en cambio quieres seguir auto-hospedando Axiscam como una app web
+tradicional (frontend + backend cada uno en su propio servicio), eso sigue
+siendo posible - queda documentado aquí como alternativa, no como el camino
+principal.
 
 Este es un monorepo de **dos servicios independientes que deben desplegarse por separado** — este
 es el paso que causa el banner rojo "No se pudo conectar con el backend" si solo desplegaste uno
@@ -95,7 +141,7 @@ de los dos. Vercel solo puede alojar el primero:
 | Servicio | Dónde | Qué hace |
 |---|---|---|
 | `apps/web` (frontend) | Vercel | La interfaz de chat que ves en el navegador |
-| `apps/orchestrator` (backend) | Render (u otro host de contenedores) | El trabajo real: llama a Claude, genera geometría, código G, etc. |
+| `apps/orchestrator` (backend) | Render, Railway, Fly.io u otro host de contenedores | El trabajo real: llama a Claude, genera geometría, código G, etc. |
 
 **Si el backend nunca se desplegó, el frontend en Vercel no tiene con quién hablar — por eso
 aparece "no se pudo conectar", aunque el frontend cargue perfectamente.** No es un bug del
@@ -110,7 +156,12 @@ corre su backend completo solo en funciones serverless. **Y esto es completament
 tus clientes**: ellos solo entran a tu link de Vercel y usan la app normal - nunca ven, ni les
 importa, que el trabajo pesado ocurre en un segundo servicio detrás.
 
-### Paso 1 — Backend en Render (el que probablemente falta)
+> Nota: `render.yaml` sigue en el repo y funciona, pero quedó como una opción entre varias - no es
+> el despliegue recomendado por defecto. Si el spin-down/redeploy de un servicio siempre encendido
+> te sigue causando el banner rojo de arriba, la app de escritorio (sección anterior) elimina ese
+> problema de raíz en vez de solo cambiar de proveedor.
+
+#### Paso 1 — Backend en Render (el que probablemente falta)
 
 1. En https://dashboard.render.com → **New +** → **Blueprint** → conecta este repositorio de
    GitHub y selecciona la rama con este código. Render detecta `render.yaml` en la raíz del repo
@@ -128,7 +179,7 @@ importa, que el trabajo pesado ocurre en un segundo servicio detrás.
 3. Cuando termine el deploy, copia la URL pública que te da Render (algo como
    `https://axiscam-orchestrator.onrender.com`).
 
-### Paso 2 — Apuntar Vercel a ese backend
+#### Paso 2 — Apuntar Vercel a ese backend
 
 1. En el dashboard de tu proyecto en Vercel → **Settings** → **Environment Variables**.
 2. Agrega `VITE_API_BASE_URL` = la URL de Render del paso anterior + `/api`, por ejemplo
@@ -152,12 +203,18 @@ alguno de esos en vez del blueprint de Render.
 Axiscam necesita a Claude (Anthropic) para el chat y la lectura de planos — no hay forma honesta
 de tener un agente de IA real sin una API key real conectándolo a un modelo real (ningún producto
 de IA escapa a esto, incluidos Perplexity, Grok o ChatGPT). Lo que sí es una decisión de diseño:
-**quién carga con esa key**. Axiscam usa una sola `ANTHROPIC_API_KEY` configurada por ti en el
-backend (Render) — tus clientes nunca ven ni configuran nada relacionado con IA, exactamente como
-en cualquier producto de IA orientado a consumidor. Si esa key llega a fallar (vencida, sin
-créditos, límite de uso alcanzado), el cliente ve un mensaje profesional y genérico en el chat en
-vez de un error técnico — el detalle real queda solo en el registro de actividad del proyecto,
-para que tú lo diagnostiques.
+**quién carga con esa key**. Axiscam usa una sola `ANTHROPIC_API_KEY` tuya — tus clientes nunca ven
+ni configuran nada relacionado con IA, exactamente como en cualquier producto de IA orientado a
+consumidor. Dónde vive esa key depende del modo:
+
+- **App de escritorio** (la forma principal, ver arriba): la key real vive solo en el relay
+  (`api/relay/[...path].js`, desplegado en Vercel) - nunca dentro del instalador que la gente
+  descarga. Ver `apps/relay/README.md` para el detalle completo y su limitación conocida.
+- **Modo avanzado (app web)**: la key vive directo en el backend (Render u otro host).
+
+Si esa key llega a fallar (vencida, sin créditos, límite de uso alcanzado), el cliente ve un
+mensaje profesional y genérico en el chat en vez de un error técnico — el detalle real queda solo
+en el registro de actividad del proyecto, para que tú lo diagnostiques.
 
 ### Evitar quedarte sin créditos sin avisar
 
@@ -194,13 +251,15 @@ dos niveles:
 Este es el mismo patrón que usa cualquier producto de IA con muchos usuarios detrás de una sola
 cuenta (Perplexity, Notion AI, etc.) - no es una limitación particular de Axiscam.
 
-### Almacenamiento persistente
+### Almacenamiento persistente (solo aplica al modo avanzado/web)
 
-El plan gratuito de Render (igual que Railway/Fly en su plan gratis) no incluye disco
-persistente: los planos subidos y los archivos STEP/STL/G-code generados se pierden en cada
-redeploy **y en cada reinicio por inactividad** (~15 min sin uso) del servicio - no es un caso
-raro, es el comportamiento normal del plan free. Si tu servicio en Render sigue en "free", vas a
-seguir perdiendo proyectos sin previo aviso, incluyendo a mitad de una demo.
+La app de escritorio guarda todo en el disco de cada usuario (su propia carpeta de datos local) -
+esto no le aplica. Si en cambio estás en el modo avanzado (backend propio en Render/Railway/Fly):
+el plan gratuito de esos hosts no incluye disco persistente: los planos subidos y los archivos
+STEP/STL/G-code generados se pierden en cada redeploy **y en cada reinicio por inactividad**
+(~15 min sin uso) del servicio - no es un caso raro, es el comportamiento normal del plan free. Si
+tu servicio en Render sigue en "free", vas a seguir perdiendo proyectos sin previo aviso, incluyendo
+a mitad de una demo.
 
 `render.yaml` ya trae listo un disco persistente montado en `/data` (bloque `disk:`) y
 `plan: starter` para que funcione - pero eso solo aplica cuando conectas/sincronizas el

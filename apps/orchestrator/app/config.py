@@ -12,6 +12,8 @@ from dataclasses import dataclass
 @dataclass(frozen=True)
 class Settings:
     anthropic_api_key: str
+    anthropic_base_url: str | None
+    anthropic_default_headers: dict[str, str]
     claude_model_vision: str
     claude_model_agent: str
     storage_dir: str
@@ -40,6 +42,21 @@ def _normalizar_origenes_cors(valor: str) -> list[str]:
 def _load() -> Settings:
     return Settings(
         anthropic_api_key=os.environ.get("ANTHROPIC_API_KEY", ""),
+        # Vacio (default) = el SDK de Anthropic pega directo a
+        # api.anthropic.com, igual que siempre. La app de escritorio
+        # (apps/desktop) le pasa aqui la URL del relay (apps/relay) en vez de
+        # una key real - ver los docstrings de _cliente_anthropic en
+        # app/vision/extractor.py y ejecutar_turno en app/agent/orchestrator.py
+        # para por que la key nunca viaja dentro del instalador.
+        anthropic_base_url=os.environ.get("ANTHROPIC_BASE_URL") or None,
+        # Header fijo que el relay (api/relay/[...path].js) exige cuando
+        # AXISCAM_RELAY_CLIENT_HEADER esta configurado ahi - ver ese archivo
+        # y apps/relay/README.md. Es una disuasion superficial (tambien
+        # extraible del instalador), no reemplaza el limite de gasto en la
+        # consola de Anthropic.
+        anthropic_default_headers=(
+            {"x-axiscam-client": h} if (h := os.environ.get("AXISCAM_RELAY_CLIENT_HEADER")) else {}
+        ),
         claude_model_vision=os.environ.get("AXISCAM_VISION_MODEL", "claude-sonnet-5"),
         claude_model_agent=os.environ.get("AXISCAM_AGENT_MODEL", "claude-sonnet-5"),
         storage_dir=os.environ.get("AXISCAM_STORAGE_DIR", "./data"),

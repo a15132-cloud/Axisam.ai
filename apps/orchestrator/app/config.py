@@ -17,24 +17,6 @@ class Settings:
     storage_dir: str
     storage_dir_debe_ser_persistente: bool
     default_postprocessor: str
-    cors_allow_origins: list[str]
-
-
-def _normalizar_origenes_cors(valor: str) -> list[str]:
-    """A browser's Origin header is always exactly scheme://host[:port] -
-    never a trailing slash, never leading/trailing whitespace. FastAPI's
-    CORSMiddleware does an EXACT string match against allow_origins, so a
-    value like "https://x.vercel.app/" or " https://x.vercel.app" (both
-    natural ways to type this by hand in Render's dashboard - a stray
-    space after a comma, a trailing slash copied from the browser bar)
-    would silently never match anything, and the browser reports that to
-    the app as an opaque "Network Error" with zero indication it was CORS
-    - looks exactly like "no internet" even though the server is healthy
-    and reachable. Stripping both here removes an entire class of
-    copy-paste misconfiguration that is otherwise invisible to whoever set
-    the env var.
-    """
-    return [o.strip().rstrip("/") for o in valor.split(",") if o.strip()]
 
 
 def _load() -> Settings:
@@ -55,7 +37,6 @@ def _load() -> Settings:
         # point" - see _obtener_o_404 in routes_projects.py.
         storage_dir_debe_ser_persistente=os.environ.get("AXISCAM_STORAGE_PERSISTENTE", "false").lower() == "true",
         default_postprocessor=os.environ.get("AXISCAM_DEFAULT_POSTPROCESSOR", "haas_vf_generico"),
-        cors_allow_origins=_normalizar_origenes_cors(os.environ.get("AXISCAM_CORS_ORIGINS", "http://localhost:5173")),
     )
 
 

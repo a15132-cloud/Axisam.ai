@@ -47,7 +47,7 @@ export class ApiError extends Error {
 // already-answering instance). CORS used to be a third possibility here, but
 // the backend now sends allow_origins=["*"] unconditionally (see
 // app/main.py) - a real CORS block from THIS backend is no longer possible,
-// so a message that confidently blamed "CORS/AXISCAM_CORS_ORIGINS" was
+// so a message that confidently blamed "CORS/a misconfigured allowlist" was
 // actively misleading here now, telling a non-technical user to go find a
 // server admin to fix a setting that isn't the actual problem anymore.
 //

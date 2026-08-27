@@ -29,11 +29,6 @@ services:
       # (ver sección "Evitar quedarte sin créditos" en el README).
       - key: ANTHROPIC_API_KEY
         sync: false
-      # Pon aquí la URL real de tu frontend en Vercel (https://tu-proyecto.vercel.app),
-      # SIN slash final. Sin esto el navegador bloquea las llamadas del
-      # frontend al backend por CORS - mismo síntoma que "no conecta".
-      - key: AXISCAM_CORS_ORIGINS
-        sync: false
       - key: AXISCAM_STORAGE_DIR
         value: /data
       # Le dice al backend que /data DEBE ser un disco persistente real -

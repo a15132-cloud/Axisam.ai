@@ -17,15 +17,17 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    # Deliberately permissive, unconditionally - not driven by
-    # AXISCAM_CORS_ORIGINS anymore. That env var (see render.yaml/config.py)
-    # requires an exact match to whatever domain the frontend happens to be
-    # served from, and Vercel hands out a NEW url for every preview
-    # deployment on top of the stable production one - a mismatch there
-    # (wrong value, stale value, testing from a preview link instead of
-    # production) silently blocks every request from the browser with an
-    # error that looks identical to "the internet is down" (see
-    # apps/web/src/lib/api.ts's diagnosticarNetworkError). This API has no
+    # Deliberately permissive, unconditionally - there used to be an
+    # AXISCAM_CORS_ORIGINS env var driving an allowlist here (now removed
+    # from render.yaml/config.py/.env.example). It required an exact match
+    # to whatever domain the frontend happens to be served from, and Vercel
+    # hands out a NEW url for every preview deployment on top of the stable
+    # production one - a mismatch there (wrong value, stale value, testing
+    # from a preview link instead of production) silently blocked every
+    # request from the browser with an error that looks identical to "the
+    # internet is down" (see apps/web/src/lib/api.ts's
+    # diagnosticarNetworkError) - and forced an extra required field into
+    # the Render Blueprint form for zero benefit. This API has no
     # cookie/session-based auth for CORS to protect in the first place - the
     # frontend never sets withCredentials, and the shared ANTHROPIC_API_KEY
     # is a server-side secret never exposed to the browser regardless of

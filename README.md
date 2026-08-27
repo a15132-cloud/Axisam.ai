@@ -134,16 +134,15 @@ importa, que el trabajo pesado ocurre en un segundo servicio detrás.
 1. En https://dashboard.render.com → **New +** → **Blueprint** → conecta este repositorio de
    GitHub y selecciona la rama con este código. Render detecta `render.yaml` en la raíz del repo
    automáticamente y configura el servicio (usa el `Dockerfile` de `apps/orchestrator/`).
-2. Render te pedirá dos valores antes de desplegar:
+2. Render te pedirá un solo valor antes de desplegar:
    - `ANTHROPIC_API_KEY` — tu clave de https://console.anthropic.com/settings/keys. Esta es la
      **única** key que existe en todo el sistema — tus clientes jamás la ven ni tienen que
      configurar nada, igual que en Perplexity, Grok o ChatGPT (ellos tampoco te piden una API key;
      la empresa la paga por detrás). Ver la sección "Evitar quedarte sin créditos sin avisar" más
      abajo antes de desplegar.
-   - `AXISCAM_CORS_ORIGINS` — la URL de tu frontend en Vercel, por ejemplo
-     `https://tu-proyecto.vercel.app` (sin `/` al final). Si no coincide exactamente con tu
-     dominio de Vercel, el navegador bloquea las llamadas y verás el mismo banner rojo aunque el
-     backend sí esté corriendo.
+   (El backend acepta llamadas desde cualquier origen — no hay una URL de Vercel que configurar
+   aquí ni un banner de CORS que perseguir; si el banner rojo de "no se pudo conectar" aparece, la
+   causa está en el Paso 2 de abajo, no aquí.)
 3. Cuando termine el deploy, copia la URL pública que te da Render (algo como
    `https://axiscam-orchestrator.onrender.com`).
 

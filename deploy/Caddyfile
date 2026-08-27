@@ -1,0 +1,5 @@
+{$AXISCAM_DOMAIN} {
+	# Caddy fetches and renews the TLS certificate for this domain
+	# automatically (Let's Encrypt/ZeroSSL) - no manual certbot step.
+	reverse_proxy orchestrator:8000
+}

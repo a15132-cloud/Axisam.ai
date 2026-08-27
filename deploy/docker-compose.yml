@@ -1,0 +1,58 @@
+# Self-hosted deployment: the orchestrator backend + a Caddy reverse proxy
+# that gets a free HTTPS certificate automatically (Let's Encrypt). Runs on
+# any machine with Docker - a free-forever Oracle Cloud "Always Free" VM,
+# any other VPS, or your own hardware. See deploy/README.md for the full
+# step-by-step guide.
+#
+# Why a reverse proxy at all instead of exposing the backend directly:
+# Vercel serves the frontend over HTTPS, and browsers block a HTTPS page
+# from calling a plain HTTP backend ("mixed content") - the backend needs
+# its own valid TLS certificate. Caddy gets and renews that automatically
+# from the domain you set in AXISCAM_DOMAIN, with zero manual certbot/nginx
+# configuration.
+services:
+  orchestrator:
+    build:
+      context: ../apps/orchestrator
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?falta ANTHROPIC_API_KEY en deploy/.env}
+      AXISCAM_STORAGE_DIR: /data
+      # Docker named volumes are always a real separate mount point, so
+      # app/storage/files.py's persistence check (st_dev comparison)
+      # detects this correctly on its own - this flag just makes a
+      # momentary "not mounted yet" during container startup read as
+      # transient instead of as data loss, same as render.yaml's use of it.
+      AXISCAM_STORAGE_PERSISTENTE: "true"
+    volumes:
+      - axiscam_data:/data
+    expose:
+      - "8000"
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8000/api/health', timeout=5)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 20s
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      - orchestrator
+    ports:
+      - "80:80" # required for the Let's Encrypt HTTP-01 challenge, even though everything real happens on 443
+      - "443:443"
+      - "443:443/udp" # HTTP/3
+    environment:
+      AXISCAM_DOMAIN: ${AXISCAM_DOMAIN:?falta AXISCAM_DOMAIN en deploy/.env}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data # certificates persist here across restarts - do not delete this volume
+      - caddy_config:/config
+
+volumes:
+  axiscam_data:
+  caddy_data:
+  caddy_config:

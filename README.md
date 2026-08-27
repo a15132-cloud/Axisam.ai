@@ -64,6 +64,9 @@ apps/
                   en la PC Windows del usuario (ver apps/windows-bridge/README.md)
 docs/
   architecture.md Detalle técnico de cada capa y el plan de migración a SolidWorks real
+deploy/
+  docker-compose.yml + README.md  Backend propio autoalojado (gratis, sin PaaS) - ver "Desplegar
+                                   a producción" abajo
 ```
 
 ## Correr en desarrollo
@@ -129,7 +132,24 @@ corre su backend completo solo en funciones serverless. **Y esto es completament
 tus clientes**: ellos solo entran a tu link de Vercel y usan la app normal - nunca ven, ni les
 importa, que el trabajo pesado ocurre en un segundo servicio detrás.
 
-### Paso 1 — Backend en Render (el que probablemente falta)
+### Paso 1 — Backend (elige una opción)
+
+#### Opción A — Servidor propio, gratis para siempre (recomendado)
+
+Ningún plan "free" de un PaaS administrado (Render, Railway, Fly) es realmente gratis sin
+condiciones: todos duermen el servicio tras un rato de inactividad y tardan ~50s en despertar en
+el siguiente request — eso es lo que se siente como "errores de conexión / lentitud constante".
+`deploy/` trae un `docker-compose.yml` que corre el mismo backend en un servidor Linux normal
+tuyo (por ejemplo una VM **Oracle Cloud "Always Free"** — la única oferta permanentemente gratis
+con una máquina real que no se apaga sola, no una prueba de 30 días) detrás de Caddy, que consigue
+el certificado HTTPS automáticamente. Ver **`deploy/README.md`** para la guía paso a paso completa
+(crear la VM, abrir puertos, instalar Docker, levantar el stack). Al final tienes una URL HTTPS
+propia — sigue con el Paso 2 de abajo usando esa URL.
+
+#### Opción B — Render (u otro host de contenedores administrado)
+
+Más simple de arrancar, pero de pago si necesitas que no se duerma (plan "Starter" o superior) —
+ver "Almacenamiento persistente" más abajo.
 
 1. En https://dashboard.render.com → **New +** → **Blueprint** → conecta este repositorio de
    GitHub y selecciona la rama con este código. Render detecta `render.yaml` en la raíz del repo
@@ -146,24 +166,26 @@ importa, que el trabajo pesado ocurre en un segundo servicio detrás.
 3. Cuando termine el deploy, copia la URL pública que te da Render (algo como
    `https://axiscam-orchestrator.onrender.com`).
 
+Alternativas a Render con el mismo `Dockerfile`: Railway o Fly.io — ambos soportan "deploy from
+Dockerfile" desde el repo de GitHub, si prefieres alguno de esos en vez del blueprint de Render.
+
 ### Paso 2 — Apuntar Vercel a ese backend
 
 1. En el dashboard de tu proyecto en Vercel → **Settings** → **Environment Variables**.
-2. Agrega `VITE_API_BASE_URL` = la URL de Render del paso anterior + `/api`, por ejemplo
-   `https://axiscam-orchestrator.onrender.com/api`.
+2. Agrega `VITE_API_BASE_URL` = la URL del Paso 1 (tu dominio propio, o la de Render) + `/api`,
+   por ejemplo `https://api.tu-dominio.com/api` o `https://axiscam-orchestrator.onrender.com/api`.
 3. **Redeploy** el proyecto en Vercel (las variables de entorno solo aplican en el próximo build,
-   no retroactivamente a un deploy que ya existe).
+   no retroactivamente a un deploy que ya existe). Nota: `ANTHROPIC_API_KEY` **no** va en Vercel —
+   Vercel solo sirve el frontend estático, esa key es del backend (Paso 1).
 
-Con eso el banner rojo debe desaparecer. Alternativas a Render con el mismo `Dockerfile`:
-Railway o Fly.io — ambos soportan "deploy from Dockerfile" desde el repo de GitHub, si prefieres
-alguno de esos en vez del blueprint de Render.
+Con eso el banner rojo debe desaparecer.
 
-> Nota honesta: escribí y revisé el `Dockerfile` y el `render.yaml` con cuidado, pero este
-> sandbox no tiene acceso a una cuenta de Render ni un daemon de Docker corriendo, así que no
-> pude ejecutar el despliegue de punta a punta yo mismo para confirmarlo. Si algo falla al
-> desplegar (típicamente un paquete de sistema faltante para las librerías nativas de
-> `cadquery`, o un typo en la clave de Render Blueprints como `runtime: docker`), copia el error
-> exacto del log de Render y lo corrijo.
+> Nota honesta: escribí y revisé el `Dockerfile`, `render.yaml` y `deploy/docker-compose.yml` con
+> cuidado (`docker compose config` valida sin errores, y el `Dockerfile` no cambió), pero este
+> sandbox no tiene un daemon de Docker corriendo, así que no pude ejecutar el despliegue de punta
+> a punta yo mismo para confirmarlo. Si algo falla al desplegar (típicamente un paquete de sistema
+> faltante para las librerías nativas de `cadquery`, o los puertos 80/443 sin abrir en el Paso 1
+> de `deploy/README.md`), copia el error exacto y lo corrijo.
 
 ## Una sola API key, invisible para tus clientes
 
@@ -213,6 +235,10 @@ Este es el mismo patrón que usa cualquier producto de IA con muchos usuarios de
 cuenta (Perplexity, Notion AI, etc.) - no es una limitación particular de Axiscam.
 
 ### Almacenamiento persistente
+
+Con la Opción A (`deploy/`, servidor propio) esto no aplica - el volumen Docker `axiscam_data` es
+siempre un punto de montaje real, persiste solo mientras no lo borres a propósito, sin plan de
+pago de por medio. Lo que sigue es específico de Render/Railway/Fly (Opción B):
 
 El plan gratuito de Render (igual que Railway/Fly en su plan gratis) no incluye disco
 persistente: los planos subidos y los archivos STEP/STL generados se pierden en cada

@@ -89,16 +89,32 @@ def generar_resumen_texto(proyecto: Proyecto) -> str:
     partes.append(_linea_separadora())
     partes.append("AVISO IMPORTANTE")
     partes.append(_linea_separadora())
-    partes.append(
-        "El modelo 3D (STEP/STL) se genero con un motor de geometria real (OpenCascade) a partir\n"
-        "de las medidas confirmadas - es geometria real, utilizable en SolidWorks/Mastercam.\n\n"
-        "El codigo G, si esta incluido, sigue siendo una SIMULACION basada en reglas: tiene\n"
-        "trayectoria real para operaciones de taladrado; para cajeras, contornos y otras\n"
-        "operaciones de fresado, la geometria de corte fue calculada (no es un placeholder\n"
-        "generico) pero NINGUNA de las dos ha sido verificada por Mastercam real (sin chequeo\n"
-        "de colisiones/gubias entre features simultaneos, sin rampas de entrada). Un maquinista\n"
-        "debe revisar el archivo completo antes de cargarlo en la maquina CNC."
-    )
+    tiene_gcode = any(a.tipo == "gcode" for a in proyecto.archivos)
+    if tiene_gcode:
+        # Axiscam's normal flow never produces a gcode archivo (see
+        # app/agent/approval.py's module docstring: the product is CAD-only,
+        # confirmar_modelo is the last checkpoint) - this branch only fires
+        # for a project whose files were populated directly through the
+        # retained-but-unreachable CAM engine (app/cam/*.py), e.g. in a test
+        # or a manual script. Keep the honest disclaimer for that case
+        # rather than assume it can never happen.
+        partes.append(
+            "El modelo 3D (STEP/STL) se genero con un motor de geometria real (OpenCascade) a partir\n"
+            "de las medidas confirmadas - es geometria real, utilizable en SolidWorks/Mastercam.\n\n"
+            "Este proyecto tambien incluye un archivo de codigo G: sigue siendo una SIMULACION basada\n"
+            "en reglas (el motor CAM de Axiscam, app/cam/*.py) - tiene trayectoria real para taladrado,\n"
+            "cajeras/ranuras y contornos, pero NO ha sido verificada por Mastercam real (sin chequeo de\n"
+            "colisiones/gubias entre features simultaneos). Un maquinista debe revisar el archivo\n"
+            "completo antes de cargarlo en la maquina CNC."
+        )
+    else:
+        partes.append(
+            "El modelo 3D (STEP/STL) se genero con un motor de geometria real (OpenCascade) a partir\n"
+            "de las medidas confirmadas - es geometria real, utilizable en SolidWorks/Mastercam.\n\n"
+            "Axiscam es una herramienta de CAD: entrega el modelo 3D, no trayectorias de maquinado ni\n"
+            "codigo G. Un programador CAM/maquinista debe programar el maquinado de esta pieza en\n"
+            "Mastercam (u otro CAM) a partir de este STEP."
+        )
     return "\n".join(partes)
 
 

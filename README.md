@@ -1,15 +1,17 @@
 # Axiscam
 
-Agente de IA que orquesta el flujo de diseño CAD (SolidWorks) y manufactura CAM (Mastercam)
-de un taller: un usuario sube el plano de una pieza en un chat, el agente extrae las medidas,
-genera el modelo 3D, planea las trayectorias de maquinado y exporta el código G — con
-aprobación humana obligatoria en tres puntos antes de que nada llegue a una máquina real.
+Agente de IA de CAD para un taller: un usuario sube el plano de una pieza en un chat, el agente
+extrae las medidas y genera el modelo 3D real (STEP + STL), con aprobación humana obligatoria en
+dos puntos antes de entregar el archivo final. Axiscam es una herramienta de **CAD, no de CAM**:
+entrega el modelo 3D listo para que un programador CAM/maquinista lo trabaje en Mastercam (u otro
+software CAM) — no planea trayectorias de maquinado ni genera código G. Ver "Por qué Axiscam no
+genera código G" más abajo.
 
 ## Qué es real hoy y qué es simulación
 
-Este entorno de desarrollo es Linux y no tiene SolidWorks ni Mastercam instalados (ambos solo
-corren en Windows con licencia activa vía COM/SDK). Para no bloquear todo el proyecto en esa
-infraestructura, el sistema está dividido así:
+Este entorno de desarrollo es Linux y no tiene SolidWorks instalado (corre en Windows con
+licencia activa vía COM). Para no bloquear todo el proyecto en esa infraestructura, el sistema
+está dividido así:
 
 | Capa | Estado en este repo |
 |---|---|
@@ -17,32 +19,51 @@ infraestructura, el sistema está dividido así:
 | Capa 2 — Orquestador (loop de tool-use con Claude) | **Real y funcional** (FastAPI + Anthropic SDK) |
 | Capa 3 — Visión / extracción del plano | **Real y funcional** (Claude multimodal), requiere `ANTHROPIC_API_KEY` |
 | Capa 4 — SolidWorks (modelado 3D) | **Geometría real por defecto**, generada con un kernel OpenCascade (`cadquery`) — produce archivos STEP/STL reales, abribles en SolidWorks hoy mismo. **SolidWorks real cuando está disponible**: si `apps/windows-bridge` corre en tu propia PC con Windows con SolidWorks instalado, el orquestador lo detecta y prefiere automáticamente su salida en vez del motor simulado (ver más abajo). |
-| Capa 4 — Mastercam (trayectorias / código G) | **Simulación basada en reglas**, claramente etiquetada como tal. Genera trayectoria de corte real para taladrado (G81/G83), cajeras (desbaste en zigzag con radio de herramienta compensado) y contornos exteriores/redondeos (offset con esquinas correctamente redondeadas) — no solo taladros. Sigue sin chequeo de colisiones entre features simultáneos, sin rampas de entrada, y features sin suficiente geometría en el JSON (p.ej. escalón) quedan como planeación sin trayectoria. **Ningún código G de este sistema debe cargarse a una máquina sin que Mastercam real lo verifique.** El conector de Mastercam real en `apps/windows-bridge` existe pero es honesto sobre su alcance: detecta la instalación, no automatiza todavía (ver `apps/windows-bridge/README.md`). |
-| Capa 5 — Base de conocimiento de manufactura | **Real**, tabla de decisión explícita (YAML + Python), datos semilla pendientes de validar por un maquinista |
+| Capa 5 — Base de conocimiento de manufactura | **Real**, tabla de decisión explícita (YAML + Python) — sigue existiendo y probada (`app/knowledge_base/`), pero ya no se expone al usuario: es parte del motor CAM retenido, ver la sección de abajo. |
 | Capa 6 — Aprobación humana | **Real y aplicado en el backend** — cada transición de aprobación es un endpoint dedicado que ningún tool-call del LLM puede invocar por su cuenta |
 
-## Conectar tu SolidWorks/Mastercam real (`apps/windows-bridge`)
+## Por qué Axiscam no genera código G
 
-Este repo también incluye un servicio .NET opcional (`apps/windows-bridge`) que, corriendo en
-tu propia PC con Windows con SolidWorks/Mastercam instalados, hace que Axiscam use el software
-real en vez del motor simulado — sin configuración manual. El orquestador intenta conectarse a
-`http://127.0.0.1:5757` en cada generación de modelo/código G con un timeout corto; si no hay
-nada ahí (el caso normal en este sandbox, en un servidor, o en cualquier máquina sin SolidWorks),
-sigue usando el motor simulado exactamente como hoy. Si el bridge está corriendo, la interfaz
-muestra un indicador ("SolidWorks real" / "Motor simulado") en cada modelo y código G generado,
-y en el pie del menú lateral. Ver `apps/windows-bridge/README.md` para instalación, alcance real
-verificado, y cómo terminar el conector de Mastercam.
+Decisión de producto: Axiscam construye el modelo 3D confirmado (STEP/STL) y se detiene ahí. No
+planea trayectorias, no estima tiempo de maquinado ni genera código G — eso queda para el
+programador CAM del taller, trabajando el STEP en Mastercam real. Dos checkpoints humanos, no
+tres: confirmar los datos extraídos del plano, y confirmar el modelo 3D — el segundo es el
+checkpoint final, no hay una tercera etapa de "trayectorias/código G" después.
+
+Si quieres **visualizar** una trayectoria de código G (tuyo, no generado por Axiscam) sobre un
+modelo, la vista independiente de **Simulación** (menú lateral) lo hace: subes tu propio `.nc`
+junto con un `.STL`/`.STEP`, y anima el recorrido real de la herramienta tal como está escrito en
+el archivo. Es solo un visor — no crea ni modifica ningún proyecto, y no verifica colisiones
+contra material o mordazas.
+
+El motor CAM que sí planeaba trayectorias y generaba código G (`app/cam/*.py` — selección de
+herramienta/velocidades por feature, ciclos de taladrado G81/G83, desbaste de cajeras, offsets de
+contorno) sigue en el repo, sigue probado (`apps/orchestrator/tests/test_cam.py`), pero ya no
+está conectado a las tools del agente ni a los endpoints de la API — es ingeniería real que puede
+volver a exponerse más adelante (sería un cambio de enrutamiento, no una reescritura), pero hoy no
+forma parte del producto.
+
+## Conectar tu SolidWorks real (`apps/windows-bridge`)
+
+Este repo también incluye un servicio .NET opcional (`apps/windows-bridge`) que, corriendo en tu
+propia PC con Windows con SolidWorks instalado, hace que Axiscam use el software real en vez del
+motor simulado — sin configuración manual. El orquestador intenta conectarse a
+`http://127.0.0.1:5757` en cada generación de modelo con un timeout corto; si no hay nada ahí (el
+caso normal en este sandbox, en un servidor, o en cualquier máquina sin SolidWorks), sigue usando
+el motor simulado exactamente como hoy. Si el bridge está corriendo, la interfaz muestra un
+indicador ("SolidWorks real" / "Motor simulado") en cada modelo generado, y en el pie del menú
+lateral. Ver `apps/windows-bridge/README.md` para instalación y alcance real verificado.
 
 ## Estructura
 
 ```
 apps/
-  orchestrator/   Backend Python (FastAPI) - Capas 2, 3, 4, 5, 6
+  orchestrator/   Backend Python (FastAPI) - Capas 2, 3, 4, 6 (Capa 5/CAM retenida pero no expuesta)
   web/            Frontend React - Capa 1
-  windows-bridge/ Servicio .NET opcional - conecta la Capa 4 a SolidWorks/Mastercam reales
+  windows-bridge/ Servicio .NET opcional - conecta la Capa 4 a SolidWorks real
                   en la PC Windows del usuario (ver apps/windows-bridge/README.md)
 docs/
-  architecture.md Detalle técnico de cada capa y el plan de migración a SolidWorks/Mastercam reales
+  architecture.md Detalle técnico de cada capa y el plan de migración a SolidWorks real
 ```
 
 ## Correr en desarrollo
@@ -76,12 +97,10 @@ uv run pytest
 1. Crear un proyecto, subir el plano (PDF/imagen/DXF) con instrucciones opcionales en texto.
 2. Revisar y **confirmar** los datos extraídos (medidas, material, features) — checkpoint 1.
 3. El sistema genera el modelo 3D real (STEP + STL descargables) y lo muestra en una vista 3D.
-   **Confirmar** el modelo — checkpoint 2.
-4. El sistema planea trayectorias y muestra una simulación estimada (tiempo, herramientas,
-   velocidades/avances). Un usuario con nombre/usuario da la **aprobación final** — checkpoint 3.
-5. Solo entonces se exporta el código G (marcado como simulación pendiente de verificación).
-6. En cualquier momento a partir del modelo 3D, el botón **"Descargar todo (.zip)"** entrega
-   STEP + STL + código G (si existe) + un reporte de resumen en un solo archivo.
+   **Confirmar** el modelo — checkpoint 2, el último: el proyecto queda **Aprobado**.
+4. En cualquier momento a partir del modelo 3D, el botón **"Descargar todo (.zip)"** entrega
+   STEP + STL + un reporte de resumen (medidas, material, features, advertencias del modelado)
+   en un solo archivo.
 
 La interfaz es responsiva: en celular, el menú de proyectos se abre como panel deslizable y el
 panel de plano/vista 3D/actividad se accede con una pestaña "Detalles" junto al chat.
@@ -95,7 +114,7 @@ de los dos. Vercel solo puede alojar el primero:
 | Servicio | Dónde | Qué hace |
 |---|---|---|
 | `apps/web` (frontend) | Vercel | La interfaz de chat que ves en el navegador |
-| `apps/orchestrator` (backend) | Render (u otro host de contenedores) | El trabajo real: llama a Claude, genera geometría, código G, etc. |
+| `apps/orchestrator` (backend) | Render (u otro host de contenedores) | El trabajo real: llama a Claude, genera la geometría 3D, etc. |
 
 **Si el backend nunca se desplegó, el frontend en Vercel no tiene con quién hablar — por eso
 aparece "no se pudo conectar", aunque el frontend cargue perfectamente.** No es un bug del
@@ -104,7 +123,7 @@ código: son dos despliegues separados y ambos son necesarios.
 Por qué el backend no puede vivir también en Vercel: sus funciones serverless no soportan un
 proceso de larga duración con un motor de geometría 3D pesado (`cadquery`/OpenCascade, cientos de
 MB de librerías nativas - muy por encima del límite de tamaño de una función de Vercel) ni guardar
-archivos de forma permanente (los planos y STEP/STL/G-code generados). No es una limitación de
+archivos de forma permanente (los planos y STEP/STL generados). No es una limitación de
 configuración que se pueda ajustar - es el mismo motivo por el que ningún producto de IA serio
 corre su backend completo solo en funciones serverless. **Y esto es completamente invisible para
 tus clientes**: ellos solo entran a tu link de Vercel y usan la app normal - nunca ven, ni les
@@ -197,7 +216,7 @@ cuenta (Perplexity, Notion AI, etc.) - no es una limitación particular de Axisc
 ### Almacenamiento persistente
 
 El plan gratuito de Render (igual que Railway/Fly en su plan gratis) no incluye disco
-persistente: los planos subidos y los archivos STEP/STL/G-code generados se pierden en cada
+persistente: los planos subidos y los archivos STEP/STL generados se pierden en cada
 redeploy **y en cada reinicio por inactividad** (~15 min sin uso) del servicio - no es un caso
 raro, es el comportamiento normal del plan free. Si tu servicio en Render sigue en "free", vas a
 seguir perdiendo proyectos sin previo aviso, incluyendo a mitad de una demo.
@@ -212,16 +231,13 @@ aceptar.
 ## Limitaciones conocidas (para no sorprenderse)
 
 - Sin `ANTHROPIC_API_KEY` configurada, la extracción de planos y el chat con el agente no
-  funcionan — el resto del pipeline (confirmar, generar, aprobar) sigue operando desde botones
-  directos en la interfaz.
+  funcionan — el resto del pipeline (confirmar, generar) sigue operando desde botones directos
+  en la interfaz.
 - El motor de geometría (Capa 4 SolidWorks) soporta barrenos en caras laterales de piezas
   rectangulares (`cara: lateral_izquierda/derecha/frontal/posterior`). Sigue sin soportar: bases
   no rectangulares/circulares, escalones, perfiles exteriores no rectangulares, ni cajeras/ranuras
   en caras laterales. Se reportan como advertencia explícita en vez de modelarse a ciegas.
-- El código G tiene trayectoria de corte real para taladrado, cajeras/ranuras y contornos
-  exteriores/redondeos; features sin geometría suficiente en el JSON (p.ej. escalón) quedan como
-  planeación (herramienta + velocidades) sin trayectoria, hasta integrar Mastercam real. Ninguna
-  de las dos tiene chequeo de colisiones entre features simultáneos ni rampas de entrada.
-- Los valores de velocidad/avance de la base de conocimiento (`app/knowledge_base/data/`) son
-  datos semilla de referencia — cada material tiene un campo `validado_por: null` hasta que un
-  maquinista del taller los revise.
+- Axiscam no genera código G ni planea trayectorias de maquinado — ver "Por qué Axiscam no genera
+  código G" arriba. El motor CAM que sí lo hacía (`app/cam/*.py`, con velocidades/avances de
+  `app/knowledge_base/data/` — datos semilla con `validado_por: null` hasta que un maquinista los
+  revise) sigue en el repo y probado, pero no está conectado al producto hoy.

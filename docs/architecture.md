@@ -3,30 +3,32 @@
 ## El contrato central: `Pieza`
 
 Todo el pipeline gira alrededor de un solo JSON (`app/schemas/piece.py::Pieza`): la Capa 3 lo
-produce a partir del plano, el humano lo confirma o edita, la Capa 4 (geometría) lo consume para
-construir el sólido, y la Capa 4/5 (CAM) lo vuelve a consumir para planear trayectorias. Ninguna
-capa downstream reinterpreta texto libre ni vuelve a "leer" el plano — todas comparten la misma
-estructura tipada (Pydantic en el backend, TypeScript espejado en `apps/web/src/lib/types.ts`).
+produce a partir del plano, el humano lo confirma o edita, y la Capa 4 (geometría) lo consume para
+construir el sólido — ese modelo 3D es la entrega final de Axiscam (ver "Por qué Axiscam no genera
+código G" en el README). Ninguna capa downstream reinterpreta texto libre ni vuelve a "leer" el
+plano — todas comparten la misma estructura tipada (Pydantic en el backend, TypeScript espejado en
+`apps/web/src/lib/types.ts`).
 
-Esto importa porque es lo que permite que Capa 4 (SolidWorks) sea reemplazable sin tocar Capa 2/3/5:
+Esto importa porque es lo que permite que Capa 4 (SolidWorks) sea reemplazable sin tocar Capa 2/3:
 mientras algo siga produciendo un `Pieza` válido y algo siga consumiendo ese mismo contrato para
 construir geometría, el resto del sistema no necesita cambiar.
 
 ## Capa 6 no es una instrucción de prompt — es una separación de código
 
-La regla "nunca debe llegar código G a una máquina sin aprobación humana explícita" no se
-implementa pidiéndole al LLM que se comporte bien. Se implementa así:
+La regla "nunca debe avanzar el proyecto sin aprobación humana explícita" no se implementa
+pidiéndole al LLM que se comporte bien. Se implementa así:
 
-- Las tres transiciones de aprobación (`app/agent/approval.py`) son funciones invocadas
-  **solo** desde endpoints REST dedicados (`/confirmar-extraccion`, `/confirmar-modelo`,
-  `/aprobar-final`), que la interfaz llama cuando un humano hace clic en un botón específico.
-- El loop de tool-use de Claude (`app/agent/orchestrator.py`) **no tiene** esas tres funciones
-  en su lista de tools. No puede llamarlas aunque el usuario le diga "ya confirmé" en el chat.
+- Las dos transiciones de aprobación (`app/agent/approval.py`) son funciones invocadas **solo**
+  desde endpoints REST dedicados (`/confirmar-extraccion`, `/confirmar-modelo`), que la interfaz
+  llama cuando un humano hace clic en un botón específico. `confirmar_modelo` es la última — no
+  hay una tercera etapa de trayectorias/código G después (ver el docstring del módulo).
+- El loop de tool-use de Claude (`app/agent/orchestrator.py`) **no tiene** esas funciones en su
+  lista de tools. No puede llamarlas aunque el usuario le diga "ya confirmé" en el chat.
 - Cada handler de Capa 4 (`app/tools/handlers.py`) vuelve a validar la precondición del lado del
-  servidor (`proyecto.pieza_confirmada`, `proyecto.modelo_confirmado`, `proyecto.aprobacion_final`)
-  antes de hacer nada — no solo confía en que el LLM decidió llamar la herramienta en el momento
-  correcto. Ver `tests/test_approval_and_handlers.py` para la prueba de que el pipeline completo
-  respeta el orden incluso si algo intenta saltarse un paso.
+  servidor (`proyecto.pieza_confirmada`, `proyecto.modelo_confirmado`) antes de hacer nada — no
+  solo confía en que el LLM decidió llamar la herramienta en el momento correcto. Ver
+  `tests/test_approval_and_handlers.py` para la prueba de que el pipeline completo respeta el
+  orden incluso si algo intenta saltarse un paso.
 
 El system prompt del agente (`app/agent/orchestrator.py::SYSTEM_PROMPT`) refuerza esto en lenguaje
 natural para que el agente explique bien la situación al usuario, pero la garantía real está en
@@ -77,7 +79,15 @@ de SolidWorks, pero **no se ha ejecutado todavía contra una instalación real**
 usado para construirlo tenía SolidWorks instalado. Ver `apps/windows-bridge/README.md`, sección
 "Honest status", para el alcance exacto verificado vs. pendiente de primera prueba real.
 
-## Capa 4/5 — Mastercam: por qué es honestamente una simulación
+## Capa 4/5 — Mastercam/CAM: motor retenido, no expuesto en el producto
+
+Axiscam es CAD, no CAM (ver "Por qué Axiscam no genera código G" en el README): el agente y la
+API solo llegan hasta el modelo 3D confirmado. `app/cam/*.py` (planeación de trayectorias,
+selección de herramienta/velocidad por feature, generación de código G) sigue existiendo en el
+repo y sigue probado (`tests/test_cam.py`), pero ninguna tool del agente ni endpoint de la API lo
+invoca — solo es alcanzable llamando directamente a las funciones de `app/tools/handlers.py`
+(`generar_trayectorias`, `simular_maquinado`, `exportar_codigo_g`) desde un test o un script. Esta
+sección documenta ese motor retenido tal cual funciona, no una capa activa del producto.
 
 Construir un motor CAM real (offsets de contorno sin gubias, desbaste de cajeras con
 verificación de colisiones, enlaces entre operaciones) es un proyecto de ingeniería
@@ -124,7 +134,12 @@ y revisarlo con cuidado lo hizo evidente.
 
 ### Migración a Mastercam real — el enganche existe, la automatización no
 
-`app/tools/handlers.py::exportar_codigo_g` ya intenta primero
+Nota de alcance: lo que sigue describe `app/tools/handlers.py::exportar_codigo_g` tal como está
+escrito — código real y probado, pero no invocado por ningún endpoint ni tool del agente hoy (ver
+la nota de alcance al inicio de esta sección). Es la ruta que quedaría lista para conectar si el
+producto vuelve a exponer CAM en el futuro.
+
+`exportar_codigo_g` ya intenta primero
 `app/integrations/windows_bridge.py::generar_codigo_g_mastercam` contra el mismo bridge de
 `apps/windows-bridge`, y solo cae a `app.cam.gcode` si no hay respuesta real — el mismo patrón
 que SolidWorks. Lo que falta es el otro lado: `AxiscamBridge.Mastercam.MastercamService` hoy solo
@@ -159,10 +174,12 @@ contexto WebGL y la pantalla queda en negro. La iluminación es manual y autocon
 encuadre de cámara usa `<Bounds>` (matemática pura, sin red). Esto también es la decisión correcta
 para una herramienta de taller que podría correr en una red aislada.
 
-Las tarjetas de la conversación (extracción, modelo 3D, trayectorias, simulación, código G) se
-derivan del estado real del proyecto en cada render (`app/lib/deriveEntries.ts`) en vez de
-mantenerse como una copia separada que se actualiza a mano después de cada acción — evita que la
-UI muestre algo que ya no coincide con lo que el backend realmente hizo.
+Las tarjetas de la conversación (extracción, modelo 3D) se derivan del estado real del proyecto
+en cada render (`app/lib/deriveEntries.ts`) en vez de mantenerse como una copia separada que se
+actualiza a mano después de cada acción — evita que la UI muestre algo que ya no coincide con lo
+que el backend realmente hizo. La vista de Simulación de código G (`SimulacionEstandaloneView.tsx`)
+es independiente de este estado: no lee ni escribe ningún proyecto, solo parsea y anima el archivo
+`.nc` que el usuario suba junto con su propio modelo.
 
 ### Responsive (celular / tablet / escritorio)
 
@@ -185,9 +202,10 @@ Un solo breakpoint (`lg`, 1024px) separa dos layouts, no varios ajustes puntuale
 ### Descarga completa
 
 `GET /api/projects/{id}/descargar-todo` arma un .zip en memoria (`app/storage/bundle.py`) con
-STEP + STL + código G (los que existan) más un `RESUMEN.txt` con las medidas, el plan de
-maquinado y el aviso de qué es geometría real vs. simulación - así el usuario tiene un solo
-archivo para llevarse, sin tener que entender la distinción entre botones individuales.
+STEP + STL (y un archivo de código G solo en el caso retenido/no-expuesto descrito arriba, si
+alguna vez existe uno) más un `RESUMEN.txt` con las medidas y el aviso de qué es geometría real
+vs. simulación - así el usuario tiene un solo archivo para llevarse, sin tener que entender la
+distinción entre botones individuales.
 
 ## Referencia rápida de la API
 
@@ -195,14 +213,17 @@ Ver `apps/orchestrator/app/api/routes_projects.py` y `routes_files.py` para el d
 resumen:
 
 - `POST /api/projects` crear · `GET /api/projects` listar · `GET/DELETE /api/projects/{id}`
-- `POST /api/projects/{id}/plano` subir plano (dispara Capa 3)
+- `PUT /api/projects/{id}/nombre` renombrar
+- `POST /api/projects/{id}/plano` subir plano (dispara Capa 3) · `/plano/verificar`,
+  `/plano/buscar-medidas-faltantes` — segunda pasada de verificación de la extracción
 - `PUT /api/projects/{id}/pieza-extraida` editar extracción antes de confirmar
 - `POST /api/projects/{id}/confirmar-extraccion` — checkpoint 1
-- `POST /api/projects/{id}/generar-modelo-3d`
-- `POST /api/projects/{id}/confirmar-modelo` — checkpoint 2
-- `POST /api/projects/{id}/generar-trayectorias`, `/simular-maquinado`
-- `POST /api/projects/{id}/aprobar-final` — checkpoint 3 · `/rechazar`
-- `POST /api/projects/{id}/exportar-codigo-g`
+- `POST /api/projects/{id}/generar-modelo-3d` · `/activar-solidworks`
+- `POST /api/projects/{id}/confirmar-modelo` — checkpoint 2, el último · `/rechazar`
 - `POST /api/projects/{id}/chat` — loop de tool-use de Claude
 - `GET /api/projects/{id}/files/{nombre}`, `/plano-original` y `/descargar-todo` (.zip) — descargas
 - `GET /api/knowledge-base/materiales`, `/postprocesadores`
+- `POST /api/convert/step-a-stl` — conversión STEP→STL para la vista de Simulación independiente
+
+No hay endpoints de trayectorias/simulación/código G — ver "Por qué Axiscam no genera código G"
+en el README.

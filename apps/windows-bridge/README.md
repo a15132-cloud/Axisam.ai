@@ -100,11 +100,16 @@ expect the first time you point it at your own SOLIDWORKS/Mastercam:
 **`AxiscamBridge.Api`** - verified. Builds and runs in this sandbox;
 `/health`, `/solidworks/generar-modelo` (503 path), and
 `/mastercam/generar-codigo-g` (503 path) were exercised directly and
-behave as documented. `/solidworks/activar` and `/mastercam/abrir` (the
-"Ver en SolidWorks" / "Abrir en Mastercam" buttons in the chat) compile
-cleanly the same way, but only their unavailable/unreachable paths have
-actually been exercised here - see the two entries below for what's
-unverified in each.
+behave as documented. `/solidworks/activar` (the "Ver en SolidWorks"
+button in the chat, still part of the product today) compiles cleanly
+the same way, but only its unavailable/unreachable path has actually
+been exercised here. `/mastercam/abrir` also compiles and exists in this
+Api project, but Axiscam's product scope is CAD-only now (see the main
+README's "Por qué Axiscam no genera código G") - there is no "Abrir en
+Mastercam" button in the chat anymore, so this endpoint isn't called by
+anything in the current frontend; it would need to be wired up again if
+CAM is ever re-exposed. See the two entries below for what's unverified
+in each service.
 
 **`AxiscamBridge.SolidWorks`** - written with real confidence, **not yet
 run against real SOLIDWORKS**. No sandbox used to build this had
